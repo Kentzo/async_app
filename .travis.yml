@@ -37,6 +37,7 @@ deploy:
   user: Ilya.Kulakov
   password:
     secure: "Z205gwgY3zhIxEVvW2Rrk128vQ4aXm2hhC9bLF5IkzNXgcjZdvBuX+E/TKkN/+Jw8UJjebU6daPxYRyu5de/ZYEMmsXvUqVWRSfbzX/Ru+dTp+0FaSpuwoh2S74LQTEBJKFF3o48OAn/GsuG8Izmey+UePqWvv4l5s/zdUNEAOa2trqjHgqCs7ulZ+nRjBOGe24N3A7O3RFdoJMCzb5stBGVIcv8NCd27pT3bDImhGHH1bl3aaeybgDltyKb8lPwpZB/8uCIeZhzzmx8ip5HuUkbDmv/gc1A3zn7488l115ESvixiSJ0TJag90H96KNxHZ0yKa1fz2ATWD5tDCij7yhxXTPdiyV253VzdfxKym90e1I4Ztf+ngtx5wHHCcRx1lweRSWbJsjhqQGK4jrDLbqZ2ZNF3F01ytP/LnQwoCBQy2RCgIqQR8DVAZ+VxegD/Nzd019UwsOi8kgHJuqClBdxxzE5NfLFNXDOX/qApTmaKgB2Z9Z70NGr5ElC/r0GLZRT2Es4BlWIN3HKeFUsvhAbY177Qab7ZBpAh1b1Kc1qrI+czBjj0AoanQwbnAMNC7ZX+AD7VPIfSKq88Kh4lQS/Q6Alv2UqL7hl6L42GlGrwo+wDP24AKYS19bwVUphZa5yuDKjFJtM2qkaHHWCudQkayKcaii0H5RBGsvoU+4="
+  distributions: "sdist bdist_wheel"
   on:
     tags: true
     branch: master
