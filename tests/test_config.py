@@ -1,7 +1,7 @@
 import typing
 import unittest.mock
 
-from async_app.config import Config, ChainConfig, Option
+from async_app.config import Config, ChainConfig, Option, ConfigOption
 
 
 class TestConfig(unittest.TestCase):
@@ -333,6 +333,33 @@ class TestConfig(unittest.TestCase):
             check_type_mock.reset_mock()
             c.update(name='foo', bar='baz')
             check_type_mock.assert_called_once_with('name', 'foo', attr_name='name')
+
+
+class TestConfigOption(unittest.TestCase):
+    def test_dict(self):
+        class SubConfig(Config):
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        c = MyConfig()
+        c.sub = {'o': 9000}
+        self.assertEqual(c.sub.o, 9000)
+
+        with self.assertRaises(TypeError):
+            c.sub = {'o': 'foo'}
+
+    def test_config(self):
+        class SubConfig(Config):
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        c = MyConfig()
+        c.sub = SubConfig(o=9000)
+        self.assertEqual(c.sub.o, 9000)
 
 
 class TestChainConfig(unittest.TestCase):

@@ -38,11 +38,12 @@ Direct access is type checked: an attempt to set incorrect value will raise Type
 Indirect access is not type checked and options (via direct access) will respect these values disregarding their types.
 """
 from collections import ChainMap, UserDict, OrderedDict
-from typing import Any, ClassVar, Dict, Generic, Optional, Type, TypeVar, get_type_hints
+from typing import Any, ClassVar, Dict, Generic, Optional, Type, TypeVar, Union, get_type_hints
 
 import typeguard
 
 
+Self = TypeVar('Self')
 OptionType = TypeVar('OptionType')
 
 
@@ -88,7 +89,7 @@ class Option(Generic[OptionType]):
     def type(self) -> Type[OptionType]:
         return self._owner._option_types[self._attr_name]
 
-    def __get__(self, instance: Optional['Config'], owner: Type['Config']):
+    def __get__(self: Self, instance: Optional['Config'], owner: Type['Config']) -> Union[Self, OptionType]:
         if instance is not None:
             # Mapping.get cannot be used, because self.default may fail with exception even when there is a value.
             try:
@@ -98,17 +99,17 @@ class Option(Generic[OptionType]):
         else:
             return self
 
-    def __set__(self, instance: 'Config', value: OptionType):
+    def __set__(self, instance: 'Config', value: OptionType) -> None:
         instance.check_type(self.name, value, attr_name=self._attr_name)
         instance.data[self.name] = value
 
-    def __delete__(self, instance: 'Config'):
+    def __delete__(self, instance: 'Config') -> None:
         try:
             del instance.data[self.name]
         except KeyError:
             pass
 
-    def __set_name__(self, owner: Type['Config'], name: str):
+    def __set_name__(self, owner: Type['Config'], name: str) -> None:
         self._owner = owner
         self._attr_name = name
         self._name = self._name if self._name is not None else name
@@ -210,6 +211,22 @@ class Config(UserDict):
             super().__setitem__(key, item)
 
     #}
+
+
+ConfigOptionType = TypeVar('ConfigOptionType', bound=Config)
+
+
+class ConfigOption(Option[ConfigOptionType]):
+    """
+    Like Option but converts
+    """
+    def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
+        option_type = self.type
+
+        if not isinstance(value, option_type):
+            value = option_type(value)
+
+        super().__set__(instance, value)
 
 
 class ChainConfig(ChainMap):
