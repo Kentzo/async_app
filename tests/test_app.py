@@ -2,7 +2,7 @@ import asyncio
 import logging
 import unittest.mock
 
-from async_app.app import Runnable
+from async_app.app import App, Runnable, Service
 from asynctest import TestCase, fail_on
 
 from . import with_timeout
@@ -399,3 +399,33 @@ class TestRunnable(TestCase):
             await r
 
         self.assert_is_done(r)
+
+
+class TestApp(TestCase):
+    @fail_on(unused_loop=False)
+    def test_config(self):
+        class A(App):
+            async def main(self):
+                pass
+
+        a = A(config=unittest.mock.sentinel.config)
+        self.assertIs(a.config, unittest.mock.sentinel.config)
+
+
+class TestService(TestCase):
+    @fail_on(unused_loop=False)
+    def test_config(self):
+        class A(App):
+            async def main(self):
+                pass
+
+        class S(Service):
+            async def main(self):
+                pass
+
+        a = A(config=unittest.mock.sentinel.app_config)
+        s = S(app=a)
+        self.assertIs(s.config, a.config)
+
+        s = S(app=a, config=unittest.mock.sentinel.service_config)
+        self.assertIs(s.config, unittest.mock.sentinel.service_config)

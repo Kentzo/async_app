@@ -284,7 +284,7 @@ class App(Runnable):
 
     App handles the SIGINT and SIGTERM signals by stopping itself.
     """
-    def __init__(self, target=None, *, name=None):
+    def __init__(self, target=None, *, config=None, name=None):
         """
 
         @param target: Coroutine that will be awaited
@@ -292,6 +292,11 @@ class App(Runnable):
         """
         super().__init__(name=name)
         self._target = target
+        self._config = config
+
+    @property
+    def config(self):
+        return self._config
 
     def exec(self, *, loop=None):
         loop = loop or asyncio.get_event_loop()
@@ -324,10 +329,15 @@ class App(Runnable):
 
 class Service(Runnable):
     # TODO: PEP 550 can be used to access app implicitly.
-    def __init__(self, *, app, name=None):
+    def __init__(self, *, app, config=None, name=None):
         super().__init__(name=name)
         self._app = app
+        self._config = config
 
     @property
     def app(self):
         return self._app
+
+    @property
+    def config(self):
+        return self._config or self.app.config
