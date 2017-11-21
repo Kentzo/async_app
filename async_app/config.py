@@ -38,21 +38,24 @@ Direct access is type checked: an attempt to set incorrect value will raise Type
 Indirect access is not type checked and options (via direct access) will respect these values disregarding their types.
 """
 from collections import ChainMap, UserDict, OrderedDict
-import typing
+from typing import Any, ClassVar, Dict, Generic, Optional, Type, TypeVar, get_type_hints
 
 import typeguard
 
 
-class Option:
+OptionType = TypeVar('OptionType')
+
+
+class Option(Generic[OptionType]):
     """
     Option is a named attribute with optional default value that can be type checked.
 
     It should be used within a definition of a Config subclass. Its type as well as accessors are resolved against
     its owner.
     """
-    def __init__(self, name: str = None, *, default=None, doc: str = None):
+    def __init__(self, name: str = None, *, default: OptionType = None, doc: str = None) -> None:
         """
-        @param name: Name of the option. If omitted, will be set to the name of the attribute.
+        @param name: Optional name. If omitted, will be set to the name of the attribute.
         @param default: Optional default value. Its type will be verified.
         @param doc: Optional docstring for the option.
         """
@@ -61,18 +64,18 @@ class Option:
         if doc is not None:
             self.__doc__ = doc
 
-        self._name = name
-        self._default = default
-        self._allow_empty = False
-        self._owner: typing.Type['Config'] = None
-        self._attr_name = None
+        self._name: str = name
+        self._default: OptionType = default
+        self._allow_empty: bool = False
+        self._owner: Type['Config'] = None
+        self._attr_name: str = None
 
     @property
     def name(self) -> str:
         return self._name
 
     @property
-    def default(self):
+    def default(self) -> OptionType:
         """
         @raise TypeError: If default does not match Option's type.
         """
@@ -82,10 +85,10 @@ class Option:
         return self._default
 
     @property
-    def type(self):
+    def type(self) -> Type[OptionType]:
         return self._owner._option_types[self._attr_name]
 
-    def __get__(self, instance: typing.Optional['Config'], owner: typing.Type['Config']):
+    def __get__(self, instance: Optional['Config'], owner: Type['Config']):
         if instance is not None:
             # Mapping.get cannot be used, because self.default may fail with exception even when there is a value.
             try:
@@ -95,7 +98,7 @@ class Option:
         else:
             return self
 
-    def __set__(self, instance: 'Config', value):
+    def __set__(self, instance: 'Config', value: OptionType):
         instance.check_type(self.name, value, attr_name=self._attr_name)
         instance.data[self.name] = value
 
@@ -105,16 +108,16 @@ class Option:
         except KeyError:
             pass
 
-    def __set_name__(self, owner: typing.Type['Config'], name: str):
+    def __set_name__(self, owner: Type['Config'], name: str):
         self._owner = owner
         self._attr_name = name
         self._name = self._name if self._name is not None else name
 
 
 class Config(UserDict):
-    _option_types: typing.Dict[str, type]
-    _option_attrs: typing.Dict[str, Option]
-    _option_names: typing.Dict[str, str]
+    _option_types: ClassVar[Dict[str, type]]
+    _option_attrs: ClassVar[Dict[str, Option]]
+    _option_names: ClassVar[Dict[str, str]]
 
     def __init__(self, *args, **kwargs):
         """
@@ -123,9 +126,13 @@ class Config(UserDict):
         super().__init__(*args, **kwargs)
 
     @classmethod
-    def check_type(cls, name: str, value, *, attr_name=None, expected_type=None):
+    def check_type(cls, name: str, value: OptionType, *, attr_name: str = None, expected_type: Type[OptionType] = None):
         """
         If name is an option, ensure that value matches its type.
+
+        @param name: Name of the option to check.
+
+        @param value: Value of the option to check.
 
         @param attr_name: If given, it will be used instead of look up.
 
@@ -142,7 +149,7 @@ class Config(UserDict):
                 return
 
         if expected_type is None:
-            expected_type = cls._option_types.get(attr_name, typing.Any)
+            expected_type = cls._option_types.get(attr_name, Any)
 
         typeguard.check_type(name, value, expected_type, None)
 
@@ -160,7 +167,7 @@ class Config(UserDict):
         except AttributeError:
             pass
 
-        type_hints = typing.get_type_hints(cls)
+        type_hints = get_type_hints(cls)
 
         for attr_name, attr in cls.__dict__.items():
             if not isinstance(attr, Option):
@@ -172,7 +179,7 @@ class Config(UserDict):
             if attr.name in option_names and option_names[attr.name] != attr_name:
                 raise AttributeError(f"mismatched override: {option_names[attr.name]} != {attr_name} for {attr.name}")
 
-            attr_type = type_hints.get(attr_name, typing.Any)
+            attr_type = type_hints.get(attr_name, Any)
 
             if attr._default is not None:
                 cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
