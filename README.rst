@@ -17,15 +17,17 @@
     :target: https://pypi.python.org/pypi/async_app
     :alt: PyPI
 
-
-Tests and CI
+Key Features
 ============
 
-To run tests:
+- Ideal for heterogeneous asyncio applications
+- `typing-friendly <https://docs.python.org/3/library/typing.html>`_ Config that enforces neither file format nor validation
 
-.. code-block::
 
-    python setup.py test
+Development
+============
 
-Tests are run against CPython 3.6 (Windows and macOS) and above including dev and nightly builds (Ubuntu).
+requirements.txt lists all dependencies needed to run tests and generate reports. See `.travis.yml <.travis.yml>`_ for commands.
+
+CI tests each change against latest release of CPython 3.6 (Windows and macOS) as well as dev and nightly builds (Ubuntu).
 PyPy will be added as soon as all necessary 3.6 features will be implemented.
