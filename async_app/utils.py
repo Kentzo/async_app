@@ -1,15 +1,15 @@
 import asyncio
-from collections.abc import Collection
 from collections import deque
 from inspect import iscoroutinefunction, isawaitable
 import logging
 import sys
+from typing import Awaitable, Collection
 
 
 LOG = logging.getLogger(__name__)
 
 
-async def wait_one(*tasks):
+async def wait_one(*tasks: Awaitable):
     """
     Either return result of the first completed task or raise its exception.
 
@@ -27,7 +27,7 @@ async def wait_one(*tasks):
         raise
 
 
-class TaskGroup(Collection):
+class TaskGroup(Collection[Awaitable]):
     """
     Automatically cancel and await all tasks upon exit.
 
@@ -50,10 +50,10 @@ class TaskGroup(Collection):
     """
     LOG = LOG.getChild('TaskGroup')
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._tasks = set()
 
-    def add_task(self, coro_or_future):
+    def add_task(self, coro_or_future: Awaitable) -> Awaitable:
         """
         Schedule a task into the current loop and add it to the group.
         """
@@ -65,7 +65,7 @@ class TaskGroup(Collection):
 
         return task
 
-    def remove_task(self, task):
+    def remove_task(self, task) -> None:
         self.LOG.debug("Done %s.", task)
         task.remove_done_callback(self.remove_task)
         self._tasks.remove(task)
