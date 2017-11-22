@@ -5,6 +5,7 @@ import contextlib
 import logging.handlers
 import signal
 import sys
+from typing import Coroutine, Generic, TypeVar
 
 LOG = logging.getLogger(__name__)
 
@@ -275,7 +276,10 @@ class Runnable(abc.ABC, collections.Awaitable):
             self.LOG.error("\"%s\" is destroyed with pending task.", self.name)
 
 
-class App(Runnable):
+ConfigType = TypeVar('ConfigType')
+
+
+class App(Runnable, Generic[ConfigType]):
     """
     App should be the root runnable for the application.
 
@@ -284,18 +288,16 @@ class App(Runnable):
 
     App handles the SIGINT and SIGTERM signals by stopping itself.
     """
-    def __init__(self, target=None, *, config=None, name=None):
+    def __init__(self, target: Coroutine = None, *, config: ConfigType = None, name: str = None):
         """
-
-        @param target: Coroutine that will be awaited
-        @param name:
+        @param target: Coroutine that will be awaited. If None, main must be overridden.
         """
         super().__init__(name=name)
         self._target = target
         self._config = config
 
     @property
-    def config(self):
+    def config(self) -> ConfigType:
         return self._config
 
     def exec(self, *, loop=None):
@@ -327,17 +329,20 @@ class App(Runnable):
     #}
 
 
-class Service(Runnable):
+AppType = TypeVar('AppType')
+
+
+class Service(Runnable, Generic[AppType, ConfigType]):
     # TODO: PEP 550 can be used to access app implicitly.
-    def __init__(self, *, app, config=None, name=None):
+    def __init__(self, *, app: AppType, config: ConfigType = None, name: str = None):
         super().__init__(name=name)
         self._app = app
         self._config = config
 
     @property
-    def app(self):
+    def app(self) -> AppType:
         return self._app
 
     @property
-    def config(self):
+    def config(self) -> ConfigType:
         return self._config or self.app.config
