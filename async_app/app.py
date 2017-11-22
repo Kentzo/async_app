@@ -5,7 +5,7 @@ import contextlib
 import logging.handlers
 import signal
 import sys
-from typing import Coroutine, Generic, TypeVar
+from typing import Awaitable, Callable, Generic, TypeVar
 
 LOG = logging.getLogger(__name__)
 
@@ -288,7 +288,7 @@ class App(Runnable, Generic[ConfigType]):
 
     App handles the SIGINT and SIGTERM signals by stopping itself.
     """
-    def __init__(self, target: Coroutine = None, *, config: ConfigType = None, name: str = None):
+    def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None):
         """
         @param target: Coroutine that will be awaited. If None, main must be overridden.
         """
