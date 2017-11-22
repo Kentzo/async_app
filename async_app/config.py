@@ -66,6 +66,7 @@ class Option(Generic[OptionType]):
             self.__doc__ = doc
 
         self._name: str = name
+        self._doc: Optional[str] = doc  # check whether doc was assigned
         self._default: OptionType = default
         self._allow_empty: bool = False
         self._owner: Type['Config'] = None
@@ -195,6 +196,9 @@ class Config(UserDict):
                 else:
                     attr._allow_empty = True
 
+            if attr._doc is None:
+                attr.__doc__ = attr_type.__doc__
+
             option_types[attr_name] = attr_type
             option_attrs[attr_name] = attr
             option_names[attr.name] = attr_name
@@ -221,7 +225,9 @@ ConfigOptionType = TypeVar('ConfigOptionType', bound=Config)
 
 class ConfigOption(Option[ConfigOptionType]):
     """
-    Like Option but converts
+    Like Option but converts value to the Config type if needed.
+
+    @note: Retains a reference of assigned config, not a copy.
     """
     def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
         option_type = self.type

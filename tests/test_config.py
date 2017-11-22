@@ -371,6 +371,16 @@ class TestConfigOption(unittest.TestCase):
             class MyConfig(Config):
                 o = ConfigOption()
 
+    def test_doc_from_type(self):
+        class SubConfig(Config):
+            """foobar"""
+            o: int = Option()
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        self.assertEqual(MyConfig.sub.__doc__, SubConfig.__doc__)
+
 
 class TestChainConfig(unittest.TestCase):
     def test_take_first_value(self):
