@@ -49,7 +49,7 @@ class Option(Generic[OptionType]):
     @property
     def default(self) -> OptionType:
         """
-        @raise TypeError: If default does not match Option's type.
+        @raise TypeError: If option is not Optional but default is None.
         """
         if self._default is None and not self._allow_empty:
             raise TypeError(f"None is not allowed as a default for {self._attr_name}")
@@ -62,10 +62,11 @@ class Option(Generic[OptionType]):
 
     def __get__(self: Self, instance: Optional['Config'], owner: Type['Config']) -> Union[Self, OptionType]:
         if instance is not None:
-            # Mapping.get cannot be used, because self.default may fail with exception even when there is a value.
-            try:
+            if self.name in instance.data:
                 return instance.data[self.name]
-            except KeyError:
+            elif self.name in instance.default:
+                return instance.default[self.name]
+            else:
                 return self.default
         else:
             return self
@@ -140,11 +141,24 @@ class Config(UserDict):
     '555-0199'
     >>> print(e.get_nested(('contact', 'tel')))
     '555-0100'
+
+    @var default: Subclasses can set values there to override Option's default.
     """
     data: Dict
-    _option_types: ClassVar[Dict[str, type]]
-    _option_attrs: ClassVar[Dict[str, Option]]
-    _option_names: ClassVar[Dict[str, str]]
+    default: Dict[str, Any]  # option name -> default
+    _option_types: ClassVar[Dict[str, type]]  # attr name -> expected attr type
+    _option_attrs: ClassVar[Dict[str, Option]]  # attr name -> attr
+    _option_names: ClassVar[Dict[str, str]]  # option name -> attr name
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.default = {}
+        for name, option in self._option_attrs.items():
+            if isinstance(option, ConfigOption):
+                default = option.type()
+                self.check_type(f'{option.name}[default]', default, attr_name=name)
+                self.default[option.name] = default
 
     @classmethod
     def check_type(cls, name: str, value: OptionType, *, attr_name: str = None, expected_type: Type[OptionType] = None):
@@ -202,11 +216,8 @@ class Config(UserDict):
 
             attr_type = type_hints.get(attr_name, Any)
 
-            if isinstance(attr, ConfigOption):
-                if not issubclass(attr_type, Config):
-                    raise TypeError(f'{attr_name} must have annotation of type Config')
-
-                attr._default = attr_type()
+            if isinstance(attr, ConfigOption) and not issubclass(attr_type, Config):
+                raise TypeError(f'{attr_name} must have annotation of type Config')
 
             if attr._default is not None:
                 cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
