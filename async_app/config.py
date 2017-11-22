@@ -1,44 +1,8 @@
 """
-Config is a subclass of UserDict that allows type-checked access.
-
->>> class MyConfig(Config):
->>>     name: str = Option(default='foo')
->>>
->>> MyConfig().name
-'foo'
->>> MyConfig(name='bar').name
-'bar'
->>> c = MyConfig()
->>> c.name = 'bar'
->>> c.name
-'bar'
->>> c = MyConfig()
->>> c['name'] = 'bar'
->>> c.name
-'bar'
->>> c = MyConfig()
->>> c.data['name'] = 'bar'
->>> c.name
-'bar'
->>> c.name = 42
-TypeError
->>> c['name'] = 42
-TypeError
->>> c.data['name'] = 42  # ok
->>> c.name
-42
-
-Every option can either be accessed directly:
-  - via the dict interface
-  - by the corresponding attribute
-or indirectly via the UserDict.data attribute.
-
-Direct access is type checked: an attempt to set incorrect value will raise TypeError.
-
-Indirect access is not type checked and options (via direct access) will respect these values disregarding their types.
+The Config container is a typed dict-like class to store application's config.
 """
 from collections import ChainMap, UserDict, OrderedDict
-from typing import Any, ClassVar, Dict, Generic, Optional, Type, TypeVar, Union, get_type_hints
+from typing import Any, ClassVar, Dict, Generic, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
 
 import typeguard
 
@@ -53,6 +17,12 @@ class Option(Generic[OptionType]):
 
     It should be used within a definition of a Config subclass. Its type as well as accessors are resolved against
     its owner.
+
+    >>> class C(Config):
+    >>>     first_name: str = Option()
+    >>>     last_name: str = Option('LastName')
+    >>>     age: int = Option(default=42)
+    >>>     tel: str = Option(doc="Telephone #")
     """
     def __init__(self, name: str = None, *, default: OptionType = None, doc: str = None) -> None:
         """
@@ -117,15 +87,64 @@ class Option(Generic[OptionType]):
 
 
 class Config(UserDict):
+    """
+    Config is a subclass of UserDict that allows type-checked access.
+
+    >>> class MyConfig(Config):
+    >>>     name: str = Option(default='foo')
+    >>>
+    >>> MyConfig().name, MyConfig().name == MyConfig()['name']
+    'foo', True
+    >>> MyConfig(name='bar').name
+    'bar'
+    >>> c = MyConfig()
+    >>> c.name = 'bar'
+    >>> c.name
+    'bar'
+    >>> c = MyConfig()
+    >>> c['name'] = 'bar'
+    >>> c.name
+    'bar'
+    >>> c = MyConfig()
+    >>> c.data['name'] = 'bar'
+    >>> c.name
+    'bar'
+    >>> c.name = 42
+    TypeError
+    >>> c['name'] = 42
+    TypeError
+    >>> c.data['name'] = 42  # ok
+    >>> c.name
+    42
+
+    Every option can either be accessed directly:
+      - via the dict interface
+      - by the corresponding attribute
+    or indirectly via the UserDict.data attribute.
+
+    Direct access is type checked: an attempt to set incorrect value will raise TypeError.
+    Indirect access is not type checked and options will respect these values disregarding their types.
+
+    The get_nested, set_nested and pop_nested methods allows to access nested dict-like objects:
+    >>> class Contact(Config):
+    >>>     tel: str = Option()
+    >>>
+    >>> class Employee(Config):
+    >>>     contact: Contact = ConfigOption()
+    >>>
+    >>> e = Employee()
+    >>> e.set_nested(('contact', 'tel'), '555-0199')
+    >>> print(e.get_nested(('contact', 'tel')))
+    '555-0199'
+    >>> print(e.pop_nested(('contact', 'tel')))
+    '555-0199'
+    >>> print(e.get_nested(('contact', 'tel')))
+    '555-0100'
+    """
+    data: Dict
     _option_types: ClassVar[Dict[str, type]]
     _option_attrs: ClassVar[Dict[str, Option]]
     _option_names: ClassVar[Dict[str, str]]
-
-    def __init__(self, *args, **kwargs):
-        """
-        Initial data for every option is checked against its type definition.
-        """
-        super().__init__(*args, **kwargs)
 
     @classmethod
     def check_type(cls, name: str, value: OptionType, *, attr_name: str = None, expected_type: Type[OptionType] = None):
@@ -210,15 +229,87 @@ class Config(UserDict):
         cls._option_attrs = option_attrs
         cls._option_names = option_names
 
+    def get_nested(self, keys: Iterable[Hashable], default=None):
+        """
+        Return the value for keys if each key references a nested object that implements __getitem__, else default.
+        """
+        value = self
+
+        try:
+            i = -1
+            for i, k in enumerate(keys):
+                value = value[k]
+        except KeyError:
+            return default
+        else:
+            if i == -1:
+                raise TypeError("get_nested expected at least 1 key, got 0")
+            else:
+                return value
+
+    def set_nested(self, keys: Iterable[Hashable], value) -> None:
+        """
+        Set the value for keys where each key references a nested object that implements __getitem__.
+        """
+        attr = self
+        it = iter(keys)
+
+        try:
+            cur = next(it)
+        except StopIteration:
+            raise TypeError("set_nested expected at least 1 key, got 0")
+
+        for nxt in it:
+            attr = attr[cur]
+            cur = nxt
+
+        attr[cur] = value
+
+    def pop_nested(self, keys: Iterable[Hashable], *args):
+        """
+        If each key in keys references a nested obkect that implemented __getitem__, remove it and return its value,
+        else return default.
+        """
+        if len(args) > 1:
+            raise TypeError("pop_nested expected at most 2 arguments, got 3")
+
+        attr = self
+        it = iter(keys)
+
+        try:
+            cur = next(it)
+        except StopIteration:
+            raise TypeError("set_nested expected at least 1 key, got 0")
+
+        try:
+            for nxt in it:
+                attr = attr[cur]
+                cur = nxt
+
+            return attr.pop(cur)
+        except KeyError:
+            if args:
+                return args[0]
+            else:
+                raise
+
     #{ UserDict
 
-    def __setitem__(self, key, item):
+    def __getitem__(self, key):
         option = self._option_attrs.get(key)
 
-        if option:
-            option.__set__(self, item)
+        if option is not None:
+            return option.__get__(self, type(self))
         else:
-            super().__setitem__(key, item)
+            return super().__getitem__(key)
+
+    def __setitem__(self, key, value):
+        option = self._option_attrs.get(key)
+
+        if option is not None:
+            option.__set__(self, value)
+        else:
+            super().__setitem__(key, value)
 
     #}
 
@@ -230,8 +321,16 @@ class ConfigOption(Option[ConfigOptionType]):
     """
     Like Option but converts value to the Config type if needed.
 
-    @note: Retains a reference of assigned config, not a copy.
+    >>> class Contact(Config):
+    >>>     tel: str = Option(default='555-0100')
+    >>>
+    >>> class Employee(Config):
+    >>>     contact: Contact = ConfigOption()
+    >>>
+    >>> print(Employee().contact.tel)
+    '555-0100'
 
+    @note: Retains a reference of assigned config, not a copy.
     @note: No default value is allowed to avoid sharing the same dict between instances.
     """
     def __init__(self, *args, **kwargs):
@@ -253,6 +352,16 @@ class ChainConfig(ChainMap):
     """
     Traverse maps and return first non-default value for the attribute.
     If no value is found, first allowed default is returned.
+
+    >>> class A(Config):
+    >>>     first_name: str = Option
+    >>>
+    >>> class B(Config):
+    >>>     last_name: str = Option
+    >>>
+    >>> c: Union[A, B] = ChainConfig(A(), B())
+    >>> print(c.first_name)
+    >>> print(c.last_name)
     """
     def __getattr__(self, item):
         error = f"type object '{type(self)}' has no attribute '{item}'"

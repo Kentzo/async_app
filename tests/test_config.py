@@ -13,8 +13,7 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(MyConfig().name, 'foo')
 
         with self.subTest('key'):
-            with self.assertRaises(KeyError):
-                MyConfig()['name']
+            self.assertEqual(MyConfig()['name'], 'foo')
 
         with self.subTest('data key'):
             with self.assertRaises(KeyError):
@@ -383,7 +382,6 @@ class TestConfigOption(unittest.TestCase):
 
     def test_default(self):
         class SubConfig(Config):
-            """foobar"""
             o: int = Option(default=42)
 
         class MyConfig(Config):
@@ -394,6 +392,71 @@ class TestConfigOption(unittest.TestCase):
         with self.assertRaises(ValueError):
             class MyConfig(Config):
                 sub: SubConfig = ConfigOption(default=SubConfig())
+
+    def test_get_nested(self):
+        class SubConfig(Config):
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        self.assertEqual(MyConfig().get_nested(('sub', 'o')), 42)
+        self.assertIsNone(MyConfig().get_nested(('foo',)))
+        self.assertIsNone(MyConfig().get_nested(('sub', 'foo')))
+
+        with self.assertRaises(TypeError):
+            MyConfig().get_nested(())
+
+    def test_set_nested(self):
+        class SubConfig(Config):
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        c = MyConfig()
+        c.set_nested(('sub', 'o'), 9000)
+        self.assertEqual(c.sub.o, 9000)
+
+        c = MyConfig()
+        c.set_nested(('foo',), 9000)
+        self.assertEqual(c['foo'], 9000)
+
+        with self.assertRaises(KeyError):
+            MyConfig().set_nested(('bar', 'baz'), 9000)
+
+        with self.assertRaises(TypeError):
+            MyConfig().set_nested((), 9000)
+
+    def test_pop_nested(self):
+        class SubConfig(Config):
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        c = MyConfig()
+        c.sub.o = 9000
+        self.assertEqual(c.pop_nested(('sub', 'o')), 9000)
+        self.assertEqual(c.sub.o, 42)
+
+        with self.assertRaises(KeyError):
+            MyConfig().pop_nested(('sub', 'o'))
+
+        self.assertEqual(MyConfig().pop_nested(('sub', 'o'), 9000), 9000)
+
+        with self.assertRaises(KeyError):
+            MyConfig().pop_nested(('foo',))
+
+        self.assertEqual(MyConfig().pop_nested(('foo',), 9000), 9000)
+
+        with self.assertRaises(KeyError):
+            MyConfig().pop_nested(('sub', 'foo'))
+
+        self.assertEqual(MyConfig().pop_nested(('sub', 'foo'), 9000), 9000)
+
+        with self.assertRaises(TypeError):
+            MyConfig().pop_nested(())
 
 
 class TestChainConfig(unittest.TestCase):
