@@ -10,6 +10,9 @@ matrix:
     - os: linux
       language: python
       python: 3.6
+      after_success:
+        - flake8 async_app
+        - codecov
     - os: linux
       language: python
       python: 3.6-dev
@@ -27,10 +30,6 @@ install:
 script:
   - python setup.py test
   - python setup.py check -srm
-
-after_success:
-  - flake8 async_app
-  - codecov
 
 deploy:
   provider: pypi
