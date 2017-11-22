@@ -82,7 +82,7 @@ class Option(Generic[OptionType]):
         @raise TypeError: If default does not match Option's type.
         """
         if self._default is None and not self._allow_empty:
-            raise TypeError
+            raise TypeError(f"None is not allowed as a default for {self._attr_name}")
 
         return self._default
 
@@ -183,8 +183,11 @@ class Config(UserDict):
 
             attr_type = type_hints.get(attr_name, Any)
 
-            if isinstance(attr, ConfigOption) and not issubclass(attr_type, Config):
-                raise TypeError(f'{attr_name} must have annotation of type Config')
+            if isinstance(attr, ConfigOption):
+                if not issubclass(attr_type, Config):
+                    raise TypeError(f'{attr_name} must have annotation of type Config')
+
+                attr._default = attr_type()
 
             if attr._default is not None:
                 cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
@@ -228,7 +231,15 @@ class ConfigOption(Option[ConfigOptionType]):
     Like Option but converts value to the Config type if needed.
 
     @note: Retains a reference of assigned config, not a copy.
+
+    @note: No default value is allowed to avoid sharing the same dict between instances.
     """
+    def __init__(self, *args, **kwargs):
+        if 'default' in kwargs:
+            raise ValueError("default value is not allowed")
+
+        super().__init__(*args, **kwargs)
+
     def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
         option_type = self.type
 

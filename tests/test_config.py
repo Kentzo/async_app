@@ -381,6 +381,20 @@ class TestConfigOption(unittest.TestCase):
 
         self.assertEqual(MyConfig.sub.__doc__, SubConfig.__doc__)
 
+    def test_default(self):
+        class SubConfig(Config):
+            """foobar"""
+            o: int = Option(default=42)
+
+        class MyConfig(Config):
+            sub: SubConfig = ConfigOption()
+
+        self.assertEqual(MyConfig().sub.o, 42)
+
+        with self.assertRaises(ValueError):
+            class MyConfig(Config):
+                sub: SubConfig = ConfigOption(default=SubConfig())
+
 
 class TestChainConfig(unittest.TestCase):
     def test_take_first_value(self):
