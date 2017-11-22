@@ -182,6 +182,9 @@ class Config(UserDict):
 
             attr_type = type_hints.get(attr_name, Any)
 
+            if isinstance(attr, ConfigOption) and not issubclass(attr_type, Config):
+                raise TypeError(f'{attr_name} must have annotation of type Config')
+
             if attr._default is not None:
                 cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
             else:

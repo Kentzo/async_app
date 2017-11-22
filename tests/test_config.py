@@ -338,7 +338,7 @@ class TestConfig(unittest.TestCase):
 class TestConfigOption(unittest.TestCase):
     def test_dict(self):
         class SubConfig(Config):
-            o: int = Option(default=42)
+            o: int = Option()
 
         class MyConfig(Config):
             sub: SubConfig = ConfigOption()
@@ -352,14 +352,24 @@ class TestConfigOption(unittest.TestCase):
 
     def test_config(self):
         class SubConfig(Config):
-            o: int = Option(default=42)
+            o: int = Option()
 
         class MyConfig(Config):
             sub: SubConfig = ConfigOption()
 
+        sub = SubConfig(o=9000)
         c = MyConfig()
-        c.sub = SubConfig(o=9000)
+        c.sub = sub
         self.assertEqual(c.sub.o, 9000)
+
+        self.assertIs(c.sub, sub)
+        sub.o = 42
+        self.assertEqual(c.sub.o, 42)
+
+    def test_annotation_required(self):
+        with self.assertRaises(TypeError):
+            class MyConfig(Config):
+                o = ConfigOption()
 
 
 class TestChainConfig(unittest.TestCase):
