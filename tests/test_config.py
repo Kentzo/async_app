@@ -19,6 +19,39 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(KeyError):
                 MyConfig().data['name']
 
+    def test_get_default_None(self):
+        class MyConfig(Config):
+            name: str = Option()
+
+        with self.subTest('attribute'):
+            with self.assertRaises(TypeError):
+                MyConfig().name
+
+        with self.subTest('key'):
+            with self.assertRaises(TypeError):
+                MyConfig()['name']
+
+        with self.subTest('data key'):
+            with self.assertRaises(KeyError):
+                MyConfig().data['name']
+
+    def test_get_default_callable(self):
+        def default():
+            return 'foo'
+
+        class MyConfig(Config):
+            name: str = Option(default=default)
+
+        with self.subTest('attribute'):
+            self.assertEqual(MyConfig().name, 'foo')
+
+        with self.subTest('key'):
+            self.assertEqual(MyConfig()['name'], 'foo')
+
+        with self.subTest('data key'):
+            with self.assertRaises(KeyError):
+                MyConfig().data['name']
+
     def test_get(self):
         class MyConfig(Config):
             name: str = Option(default='foo')
@@ -180,18 +213,6 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(c.first_name, 42)
         self.assertEqual(c.last_name, 9000)
 
-    def test_required(self):
-        class MyConfig(Config):
-            name: str = Option()
-
-        c = MyConfig()
-
-        with self.assertRaises(TypeError):
-            c.name
-
-        MyConfig.name._default = 'foo'
-        self.assertEqual(c.name, 'foo')
-
     def test_name_is_optional(self):
         class MyConfig(Config):
             name: str = Option()
@@ -256,7 +277,7 @@ class TestConfig(unittest.TestCase):
                 check_type_mock.reset_mock()
                 class MyConfig(Config):
                     name: str = Option()
-                check_type_mock.assert_called_once_with('name[default]', None, expected_type=str)
+                check_type_mock.assert_not_called()
 
         class MyConfig(Config):
             name: str = Option()
@@ -273,11 +294,23 @@ class TestConfig(unittest.TestCase):
             check_type_mock.assert_not_called()
 
         with self.subTest('get default'):
-            c = MyConfig()
             check_type_mock.reset_mock()
+            c = MyConfig()
             with self.assertRaises(TypeError):
                 c.name
-            check_type_mock.assert_not_called()
+            check_type_mock.assert_called_once_with('name[default]', None, attr_name='name')
+
+            check_type_mock.reset_mock()
+            def default():
+                return 'foo'
+            class MyConfig(MyConfig):
+                name: str = Option(default=default)
+            c = MyConfig()
+            c.name
+            check_type_mock.assert_has_calls([
+                unittest.mock.call('name[default]', default, attr_name='name'),
+                unittest.mock.call('name[default]', 'foo', attr_name='name')
+            ])
 
         with self.subTest('get attr'):
             c = MyConfig(name='foo')
@@ -400,10 +433,6 @@ class TestConfigOption(unittest.TestCase):
             sub: SubConfig = ConfigOption()
 
         self.assertEqual(MyConfig().sub.o, 42)
-
-        with self.assertRaises(ValueError):
-            class MyConfig(Config):
-                sub: SubConfig = ConfigOption(default=SubConfig())
 
         a = MyConfig()
         a.sub.o = 9000

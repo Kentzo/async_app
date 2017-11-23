@@ -2,7 +2,7 @@
 The Config container is a typed dict-like class to store application's config.
 """
 from collections import ChainMap, UserDict, OrderedDict
-from typing import Any, ClassVar, Dict, Generic, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
+from typing import Any, Callable, ClassVar, Dict, Generic, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
 
 import typeguard
 
@@ -24,7 +24,7 @@ class Option(Generic[OptionType]):
     >>>     age: int = Option(default=42)
     >>>     tel: str = Option(doc="Telephone #")
     """
-    def __init__(self, name: str = None, *, default: OptionType = None, doc: str = None) -> None:
+    def __init__(self, name: str = None, *, default: Union[Callable[[], None], OptionType] = None, doc: str = None) -> None:
         """
         @param name: Optional name. If omitted, will be set to the name of the attribute.
         @param default: Optional default value. Its type will be verified.
@@ -37,24 +37,17 @@ class Option(Generic[OptionType]):
 
         self._name: str = name
         self._doc: Optional[str] = doc  # check whether doc was assigned
-        self._default: OptionType = default
-        self._allow_empty: bool = False
+        self._default: Union[Callable, OptionType] = default
+
         self._owner: Type['Config'] = None
         self._attr_name: str = None
+
+        self._is_default_valid = None
+        self._is_default_callable = False
 
     @property
     def name(self) -> str:
         return self._name
-
-    @property
-    def default(self) -> OptionType:
-        """
-        @raise TypeError: If option is not Optional but default is None.
-        """
-        if self._default is None and not self._allow_empty:
-            raise TypeError(f"None is not allowed as a default for {self._attr_name}")
-
-        return self._default
 
     @property
     def type(self) -> Type[OptionType]:
@@ -67,7 +60,9 @@ class Option(Generic[OptionType]):
             elif self.name in instance.default:
                 return instance.default[self.name]
             else:
-                return self.default
+                d = self.resolve_default(instance)
+                instance.default[self.name] = d
+                return d
         else:
             return self
 
@@ -85,6 +80,25 @@ class Option(Generic[OptionType]):
         self._owner = owner
         self._attr_name = name
         self._name = self._name if self._name is not None else name
+
+    def resolve_default(self, instance: 'Config') -> OptionType:
+        if self._is_default_valid is None:
+            try:
+                instance.check_type(f'{self.name}[default]', self._default, attr_name=self._attr_name)
+            except TypeError:
+                self._is_default_valid = False
+            else:
+                self._is_default_valid = True
+
+        if self._is_default_valid:
+            d = self._default
+        elif callable(self._default):
+            d = self._default()
+            instance.check_type(f'{self.name}[default]', d, attr_name=self._attr_name)
+        else:
+            raise TypeError(f"{self._default} is not allowed default for {self.name}")
+
+        return d
 
 
 class Config(UserDict):
@@ -152,13 +166,7 @@ class Config(UserDict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.default = {}
-        for name, option in self._option_attrs.items():
-            if isinstance(option, ConfigOption):
-                default = option.type()
-                self.check_type(f'{option.name}[default]', default, attr_name=name)
-                self.default[option.name] = default
 
     @classmethod
     def check_type(cls, name: str, value: OptionType, *, attr_name: str = None, expected_type: Type[OptionType] = None):
@@ -219,15 +227,9 @@ class Config(UserDict):
             if isinstance(attr, ConfigOption) and not issubclass(attr_type, Config):
                 raise TypeError(f'{attr_name} must have annotation of type Config')
 
-            if attr._default is not None:
+            # None and callable are resolved during instantiation.
+            if attr._default is not None and not callable(attr._default):
                 cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
-            else:
-                try:
-                    cls.check_type(f'{attr.name}[default]', None, expected_type=attr_type)
-                except TypeError:
-                    attr._allow_empty = False
-                else:
-                    attr._allow_empty = True
 
             if attr._doc is None:
                 attr.__doc__ = attr_type.__doc__
@@ -342,14 +344,7 @@ class ConfigOption(Option[ConfigOptionType]):
     '555-0100'
 
     @note: Retains a reference of assigned config, not a copy.
-    @note: No default value is allowed to avoid sharing the same dict between instances.
     """
-    def __init__(self, *args, **kwargs):
-        if 'default' in kwargs:
-            raise ValueError("default value is not allowed")
-
-        super().__init__(*args, **kwargs)
-
     def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
         option_type = self.type
 
@@ -357,6 +352,12 @@ class ConfigOption(Option[ConfigOptionType]):
             value = option_type(value)
 
         super().__set__(instance, value)
+
+    def resolve_default(self, instance):
+        if self._default is None:
+            return self.type()
+        else:
+            return super().resolve_default(instance)
 
 
 class ChainConfig(ChainMap):
