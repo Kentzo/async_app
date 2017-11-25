@@ -163,7 +163,7 @@ class Runnable(abc.ABC, collections.Awaitable):
         @raise RuntimeError: If started more than once.
         """
         if self._run_f:
-            raise RuntimeError("\"%s\" can only be started once")
+            raise RuntimeError(f"\"{self.name}\" can only be started once")
 
         self.LOG.debug("\"%s\" started.", self.name)
         self._run_f = asyncio.ensure_future(self.run(), loop=loop)
@@ -268,7 +268,7 @@ class Runnable(abc.ABC, collections.Awaitable):
         if self._run_f:
             return self._run_f.__await__()
         else:
-            raise RuntimeError("\"%s\" is not running")
+            raise RuntimeError(f"\"{self.name}\" is not running")
 
     def __repr__(self):
         return '<{}(name={})>'.format(type(self).__name__, self.name)
