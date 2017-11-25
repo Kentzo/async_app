@@ -5,7 +5,9 @@ import contextlib
 import logging.handlers
 import signal
 import sys
-from typing import Awaitable, Callable, Generic, TypeVar
+import threading
+from typing import Awaitable, Callable, Generic, Optional, Type, TypeVar
+import weakref
 
 LOG = logging.getLogger(__name__)
 
@@ -276,7 +278,15 @@ class Runnable(abc.ABC, collections.Awaitable):
             self.LOG.error("\"%s\" is destroyed with pending task.", self.name)
 
 
+AppType = TypeVar('AppType')
 ConfigType = TypeVar('ConfigType')
+
+
+class AppLocal(threading.local):
+    map = None
+
+    def __init__(self):
+        self.map = weakref.WeakValueDictionary()
 
 
 class App(Runnable, Generic[ConfigType]):
@@ -288,6 +298,27 @@ class App(Runnable, Generic[ConfigType]):
 
     App handles the SIGINT and SIGTERM signals by stopping itself.
     """
+    app_local = AppLocal()
+
+    @classmethod
+    def current_app(cls: Type[AppType]) -> Optional[AppType]:
+        # TODO: Use PEP 550.
+        apps_map = cls.app_local.map
+
+        try:
+            loop = asyncio.get_event_loop()
+            loop_ref = weakref.ref(loop)
+        except RuntimeError:
+            LOG.warning("There is no current asyncio event loop.")
+            return None
+
+        app = apps_map.get(loop_ref)
+
+        if app is None:
+            LOG.debug("There is no active App in event loop %s.", loop)
+
+        return app
+
     def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None):
         """
         @param target: Coroutine that will be awaited. If None, main must be overridden.
@@ -302,14 +333,18 @@ class App(Runnable, Generic[ConfigType]):
 
     def exec(self, *, loop=None):
         loop = loop or asyncio.get_event_loop()
+
+        apps_map = self.app_local.map
+        loop_ref = weakref.ref(loop, lambda ref: self.app_local.map.pop(ref, None))
+        apps_map[loop_ref] = self
+
         try:
             t = self.start(loop=loop)
             loop.run_until_complete(t)
         except asyncio.CancelledError:
             pass
         finally:
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+            del apps_map[loop_ref]
 
     #{ Runnable
 
@@ -324,19 +359,15 @@ class App(Runnable, Generic[ConfigType]):
         if self._target:
             await asyncio.ensure_future(self._target())
         else:
-            raise NotImplementedError("either pass \"target\" or override")
+            raise NotImplementedError("either pass \"target\" or override main")
 
     #}
 
 
-AppType = TypeVar('AppType')
-
-
 class Service(Runnable, Generic[AppType, ConfigType]):
-    # TODO: PEP 550 can be used to access app implicitly.
-    def __init__(self, *, app: AppType, config: ConfigType = None, name: str = None):
+    def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None):
         super().__init__(name=name)
-        self._app = app
+        self._app = app or App.current_app()
         self._config = config
 
     @property

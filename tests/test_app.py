@@ -411,6 +411,54 @@ class TestApp(TestCase):
         a = A(config=unittest.mock.sentinel.config)
         self.assertIs(a.config, unittest.mock.sentinel.config)
 
+    @fail_on(unused_loop=False)
+    def test_passing_event_loop(self):
+        loop = asyncio.new_event_loop()
+
+        async def foo():
+            self.assertIs(asyncio.get_event_loop(), loop)
+
+        App(target=foo).exec(loop=loop)
+
+    def test_current_app(self):
+        async def foo():
+            self.assertIsNotNone(App.current_app())
+
+        app = App(target=foo)
+
+        with self.subTest('before exec'):
+            self.assertIsNone(App.current_app())
+
+        with self.subTest('exec'):
+            app.exec()
+
+        with self.subTest('after_exec'):
+            self.assertIsNone(App.current_app())
+
+        old_loop = asyncio.get_event_loop()
+        asyncio.set_event_loop(None)
+
+        with self.assertLogs('', logging.WARNING):
+            self.assertIsNone(App.current_app())
+
+        asyncio.set_event_loop(old_loop)
+
+    def test_exec_exception(self):
+        async def foo():
+            raise RuntimeError
+
+        async def bar():
+            raise asyncio.CancelledError
+
+        with self.assertRaises(RuntimeError):
+            App(target=foo).exec()
+
+        App(target=bar).exec()
+
+    def test_exec_requires_target(self):
+        with self.assertRaises(NotImplementedError):
+            App(target=None).exec()
+
 
 class TestService(TestCase):
     @fail_on(unused_loop=False)
@@ -429,3 +477,17 @@ class TestService(TestCase):
 
         s = S(app=a, config=unittest.mock.sentinel.service_config)
         self.assertIs(s.config, unittest.mock.sentinel.service_config)
+
+    def test_resolves_app(self):
+        test_self = self
+        app = App()
+
+        class S(Service):
+            async def main(self):
+                test_self.assertIs(self.app, app)
+
+        async def foo():
+            await S().start()
+
+        app._target = foo
+        app.exec()
