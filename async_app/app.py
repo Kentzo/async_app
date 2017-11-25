@@ -351,9 +351,12 @@ class App(Runnable, Generic[ConfigType]):
     async def initialize(self):
         await super().initialize()
 
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(signal.SIGINT, self.stop)
-        loop.add_signal_handler(signal.SIGTERM, self.stop)
+        try:
+            loop = asyncio.get_event_loop()
+            loop.add_signal_handler(signal.SIGINT, self.stop)
+            loop.add_signal_handler(signal.SIGTERM, self.stop)
+        except NotImplementedError:
+            self.LOG.debug("%s does not implement add_signal_handler", loop)
 
     async def main(self):
         if self._target:
