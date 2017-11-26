@@ -369,9 +369,22 @@ class App(Runnable, Generic[ConfigType]):
 
 class Service(Runnable, Generic[AppType, ConfigType]):
     def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None):
+        """
+        @param app: App service belongs to. If None, will be resolved at the beginning of the service's execution.
+        """
         super().__init__(name=name)
-        self._app = app or App.current_app()
+        self._app = app
         self._config = config
+
+    async def run(self, *args, **kwargs):
+        current_app = App.current_app()
+
+        if self._app is None:
+            self._app = current_app
+        elif self._app != current_app:
+            raise RuntimeError("")
+
+        return await super().run(*args, **kwargs)
 
     @property
     def app(self) -> AppType:
