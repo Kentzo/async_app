@@ -370,7 +370,7 @@ class App(Runnable, Generic[ConfigType]):
 class Service(Runnable, Generic[AppType, ConfigType]):
     def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None):
         """
-        @param app: App service belongs to. If None, will be resolved at the beginning of the service's execution.
+        @param app: App that owns the service. If None, will be resolved at the beginning of the service's execution.
         """
         super().__init__(name=name)
         self._app = app
@@ -382,7 +382,7 @@ class Service(Runnable, Generic[AppType, ConfigType]):
         if self._app is None:
             self._app = current_app
         elif self._app != current_app:
-            raise RuntimeError("")
+            raise RuntimeError(f"{self.name} should run in {self._app.name} but runs in {current_app.name} instead")
 
         return await super().run(*args, **kwargs)
 
