@@ -29,5 +29,5 @@ Development
 
 requirements.txt lists all dependencies needed to run tests and generate reports. See `.travis.yml <.travis.yml>`_ for commands.
 
-CI tests each change against latest release of CPython 3.6 (Windows and macOS) as well as dev and nightly builds (Ubuntu).
+CI tests each change against latest release of CPython 3 (Windows and macOS) as well as dev (macOS and Ubuntu) and nightly builds (Ubuntu).
 PyPy will be added as soon as all necessary 3.6 features will be implemented.

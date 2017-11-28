@@ -7,6 +7,20 @@ matrix:
         - brew install python3
         - virtualenv env -p python3
         - source env/bin/activate
+    - os: osx
+      language: generic
+      before_install:
+        - brew update
+        - brew install python3 --HEAD
+        - virtualenv env -p python3
+        - source env/bin/activate
+    - os: osx
+      language: generic
+      before_install:
+        - brew update
+        - brew install python3 --devel
+        - virtualenv env -p python3
+        - source env/bin/activate
     - os: linux
       language: python
       python: 3.6
