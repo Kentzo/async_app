@@ -301,12 +301,12 @@ class App(Runnable, Generic[ConfigType]):
     app_local = AppLocal()
 
     @classmethod
-    def current_app(cls: Type[AppType]) -> Optional[AppType]:
+    def current_app(cls: Type[AppType], loop=None) -> Optional[AppType]:
         # TODO: Use PEP 550.
         apps_map = cls.app_local.map
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = loop or asyncio.get_event_loop()
             loop_ref = weakref.ref(loop)
         except RuntimeError:
             LOG.warning("There is no current asyncio event loop.")
