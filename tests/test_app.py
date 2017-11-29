@@ -2,7 +2,7 @@ import asyncio
 import logging
 import unittest.mock
 
-from async_app.app import App, Runnable, Service
+from async_app.app import App, Runnable, Service, make_service
 from asynctest import TestCase, fail_on
 
 from . import with_timeout
@@ -459,6 +459,31 @@ class TestApp(TestCase):
         with self.assertRaises(NotImplementedError):
             App(target=None).exec()
 
+    @fail_on(unused_loop=False)
+    def test_make_service(self):
+        class AService(Service):
+            async def main(self):
+                pass
+
+        class BService(Service):
+            async def main(self):
+                pass
+
+        class MyApp(App):
+            @make_service(AService)
+            def _make_a_service(self, service_type, *args, **kwargs):
+                return 'foo'
+
+            @make_service(BService)
+            def _make_b_service(self, service_type, *args, **kwargs):
+                return 'bar'
+
+        app = MyApp()
+        self.assertEqual(app.make_service(AService), 'foo')
+        self.assertEqual(app.make_service(BService), 'bar')
+        self.assertEqual(app.make_service(int), int())
+        self.assertIsNot(App._make_service_dispatcher, MyApp._make_service_dispatcher)
+
 
 class TestService(TestCase):
     @fail_on(unused_loop=False)
@@ -491,3 +516,36 @@ class TestService(TestCase):
 
         app._target = foo
         app.exec()
+
+    @fail_on(unused_loop=False)
+    def test_make_service(self):
+        class AService(Service):
+            async def main(self):
+                pass
+
+        class BService(Service):
+            async def main(self):
+                pass
+
+        class MyApp(App):
+            @make_service(AService)
+            def _make_a_service(self, service_type, *args, **kwargs):
+                return 'foo'
+
+        class MyService(Service):
+            @make_service(BService)
+            def _make_b_service(self, service_type, *args, **kwargs):
+                return 'bar'
+
+            async def main(self):
+                pass
+
+        service = MyService(app=MyApp())
+        self.assertEqual(service.make_service(AService), 'foo')
+        self.assertEqual(service.make_service(BService), 'bar')
+        self.assertEqual(service.make_service(int), int())
+        self.assertIsNot(Service._make_service_dispatcher, MyService._make_service_dispatcher)
+
+        service = MyService()
+        self.assertEqual(service.make_service(BService), 'bar')
+        self.assertEqual(service.make_service(int), int())

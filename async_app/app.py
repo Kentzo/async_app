@@ -2,12 +2,15 @@ import abc
 import asyncio
 import collections
 import contextlib
+import functools
 import logging.handlers
 import signal
 import sys
 import threading
-from typing import Awaitable, Callable, Generic, Optional, Type, TypeVar
+from typing import Awaitable, Callable, Generic, GenericMeta, Optional, Type, TypeVar
 import weakref
+
+from .config import Config
 
 LOG = logging.getLogger(__name__)
 
@@ -278,8 +281,9 @@ class Runnable(abc.ABC, collections.Awaitable):
             self.LOG.error("\"%s\" is destroyed with pending task.", self.name)
 
 
-AppType = TypeVar('AppType')
-ConfigType = TypeVar('ConfigType')
+AppType = TypeVar('AppType', bound='App')
+ConfigType = TypeVar('ConfigType', bound=Config)
+ServiceType = TypeVar('ServiceType', bound='Service')
 
 
 class AppLocal(threading.local):
@@ -289,14 +293,43 @@ class AppLocal(threading.local):
         self.map = weakref.WeakValueDictionary()
 
 
-class App(Runnable, Generic[ConfigType]):
+class _ServiceMakerMixin:
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls._make_service_dispatcher = functools.singledispatch(cls._make_service)
+
+        for attr in cls.__dict__.values():
+            if hasattr(attr, 'service_type'):
+                cls._make_service_dispatcher.register(attr.service_type, attr)
+
+    def make_service(self, service_type: Type[ServiceType], *args, **kwargs) -> ServiceType:
+        return self._make_service_dispatcher.dispatch(service_type)(self, service_type, *args, **kwargs)
+
+    def _make_service(self, service_type, *args, **kwargs):
+        return service_type(*args, **kwargs)
+
+
+class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
     """
-    App should be the root runnable for the application.
+    App is the root runnable for the application.
 
     It's semantics is alike Thread: user can either subclass it and override main
     or provide a callable that returns a coroutine.
 
     App handles the SIGINT and SIGTERM signals by stopping itself.
+
+    >>> class MyApp(App):
+    >>>     async def main(self):
+    >>>         a_service = ...
+    >>>         b_service = ...
+    >>>         await asyncio.gather(a_service, b_service)
+    >>>
+    >>> MyApp().exec()
+
+    App provides a factory method to create services: make_service
+    Subclasses of App (and Service) can override how service is created with the make_service decorator.
+
+    @see: make_service
     """
     app_local = AppLocal()
 
@@ -319,6 +352,10 @@ class App(Runnable, Generic[ConfigType]):
 
         return app
 
+    def __init_subclass__(cls, **kwargs):
+        super(GenericMeta, cls).__setattr__('_gorg', cls)
+        super().__init_subclass__(**kwargs)
+
     def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None):
         """
         @param target: Coroutine that will be awaited. If None, main must be overridden.
@@ -328,7 +365,7 @@ class App(Runnable, Generic[ConfigType]):
         self._config = config
 
     @property
-    def config(self) -> ConfigType:
+    def config(self) -> Optional[ConfigType]:
         return self._config
 
     def exec(self, *, loop=None):
@@ -351,8 +388,9 @@ class App(Runnable, Generic[ConfigType]):
     async def initialize(self):
         await super().initialize()
 
+        loop = asyncio.get_event_loop()
+
         try:
-            loop = asyncio.get_event_loop()
             loop.add_signal_handler(signal.SIGINT, self.stop)
             loop.add_signal_handler(signal.SIGTERM, self.stop)
         except NotImplementedError:
@@ -367,7 +405,19 @@ class App(Runnable, Generic[ConfigType]):
     #}
 
 
-class Service(Runnable, Generic[AppType, ConfigType]):
+AppType = TypeVar('AppType', bound=App)
+
+
+class Service(Runnable, _ServiceMakerMixin, Generic[AppType, ConfigType]):
+    """
+    Service implements asynchronous task for the app.
+
+    Almost like vanilla Runnable with attributes to access app, config and factory method for services.
+    """
+    def __init_subclass__(cls, **kwargs):
+        super(GenericMeta, cls).__setattr__('_gorg', cls)
+        super().__init_subclass__(**kwargs)
+
     def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None):
         """
         @param app: App that owns the service. If None, will be resolved at the beginning of the service's execution.
@@ -387,9 +437,44 @@ class Service(Runnable, Generic[AppType, ConfigType]):
         return await super().run(*args, **kwargs)
 
     @property
-    def app(self) -> AppType:
+    def app(self) -> Optional[AppType]:
         return self._app
 
     @property
-    def config(self) -> ConfigType:
+    def config(self) -> Optional[ConfigType]:
         return self._config or self.app.config
+
+    def _make_service(self, service_type, *args, **kwargs):
+        if self.app:
+            return self.app.make_service(service_type, *args, **kwargs)
+        else:
+            return service_type(*args, **kwargs)
+
+
+def make_service(service_type):
+    """
+    Mark which service factory method should create.
+
+    >>> class MyService(Service)
+    >>>     def __init__(self, *, value, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.value = some_value
+    >>>
+    >>>     async def main(self):
+    >>>         pass
+    >>>
+    >>> class MyApp(App):
+    >>>     @make_service(MyService)
+    >>>     def _make_a_service(self, service_type, *args, **kwargs):
+    >>>         kwargs.setdefault('value', 42)
+    >>>         return service_type(*args, **kwargs)
+    >>>
+    >>> app = MyApp()
+    >>> service = app.make_service(MyService)
+    >>> assert service.value == 42
+    """
+    def decorator(func):
+        func.service_type = service_type
+        return func
+
+    return decorator
