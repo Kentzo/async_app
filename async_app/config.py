@@ -2,7 +2,7 @@
 The Config container is a typed dict-like class to store application's config.
 """
 from collections import ChainMap, UserDict, OrderedDict
-from typing import Any, Callable, ClassVar, Dict, Generic, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
+from typing import Any, Callable, ClassVar, Dict, Generic, GenericMeta, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
 
 import typeguard
 
@@ -24,6 +24,10 @@ class Option(Generic[OptionType]):
     >>>     age: int = Option(default=42)
     >>>     tel: str = Option(doc="Telephone #")
     """
+    def __init_subclass__(cls, **kwargs):
+        super(GenericMeta, cls).__setattr__('_gorg', cls)
+        super().__init_subclass__(**kwargs)
+
     def __init__(self, name: str = None, *, default: Union[Callable[[], OptionType], OptionType] = None, doc: str = None) -> None:
         """
         @param name: Optional name. If omitted, will be set to the name of the attribute.
