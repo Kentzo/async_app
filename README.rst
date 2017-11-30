@@ -1,7 +1,7 @@
 .. image:: https://travis-ci.org/Kentzo/async_app.svg?branch=master
     :target: https://travis-ci.org/Kentzo/async_app
     :alt: Travis
-.. image:: https://ci.appveyor.com/api/projects/status/0k09gqgavm7h2ud8/branch/master?svg=true
+.. image:: https://ci.appveyor.com/api/projects/status/abqxn2vbk5k2styb/branch/master?svg=true
     :target: https://ci.appveyor.com/project/Kentzo/async-app
     :alt: AppVeyor
 .. image:: https://codecov.io/gh/Kentzo/async_app/branch/master/graph/badge.svg
