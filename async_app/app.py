@@ -296,23 +296,7 @@ class AppLocal(threading.local):
         self.map = weakref.WeakValueDictionary()
 
 
-class ServiceMakerMixin:
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls._make_service_dispatcher = functools.singledispatch(cls._make_service)
-
-        for attr in cls.__dict__.values():
-            if hasattr(attr, 'service_type'):
-                cls._make_service_dispatcher.register(attr.service_type, attr)
-
-    def make_service(self, service_type: Type[ServiceType], *args, **kwargs) -> ServiceType:
-        return self._make_service_dispatcher.dispatch(service_type)(self, service_type, *args, **kwargs)
-
-    def _make_service(self, service_type, *args, **kwargs):
-        return service_type(*args, **kwargs)
-
-
-class App(Runnable, ServiceMakerMixin, Generic[ConfigType]):
+class App(Runnable, Generic[ConfigType]):
     """
     App is the root runnable for the application.
 
@@ -411,7 +395,7 @@ class App(Runnable, ServiceMakerMixin, Generic[ConfigType]):
 AppType = TypeVar('AppType', bound=App)
 
 
-class Service(Runnable, ServiceMakerMixin, Generic[AppType, ConfigType]):
+class Service(Runnable, Generic[AppType, ConfigType]):
     """
     Service implements asynchronous task for the app.
 
@@ -448,40 +432,3 @@ class Service(Runnable, ServiceMakerMixin, Generic[AppType, ConfigType]):
             raise RuntimeError(f"{self.name} should run in {self._app.name} but runs in {current_app.name} instead")
 
         return await super().run(*args, **kwargs)
-
-    #{ ServiceMakerMixin
-
-    def _make_service(self, service_type, *args, **kwargs):
-        if self.app:
-            return self.app.make_service(service_type, *args, **kwargs)
-        else:
-            return service_type(*args, **kwargs)
-
-
-def make_service(service_type):
-    """
-    Register instance method with the make_service dispatch registry.
-
-    >>> class MyService(Service)
-    >>>     def __init__(self, *, value, **kwargs):
-    >>>         super().__init__(**kwargs)
-    >>>         self.value = some_value
-    >>>
-    >>>     async def main(self):
-    >>>         pass
-    >>>
-    >>> class MyApp(App):
-    >>>     @make_service(MyService)
-    >>>     def _make_a_service(self, service_type, *args, **kwargs):
-    >>>         kwargs.setdefault('value', 42)
-    >>>         return service_type(*args, **kwargs)
-    >>>
-    >>> app = MyApp()
-    >>> service = app.make_service(MyService)
-    >>> assert service.value == 42
-    """
-    def decorator(func):
-        func.service_type = service_type
-        return func
-
-    return decorator
