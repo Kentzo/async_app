@@ -24,10 +24,10 @@ class Option(Generic[OptionType]):
     >>>     age: int = Option(default=42)
     >>>     tel: str = Option(doc="Telephone #")
     """
-    def __init__(self, name: str = None, *, default: Union[Callable[[], None], OptionType] = None, doc: str = None) -> None:
+    def __init__(self, name: str = None, *, default: Union[Callable[[], OptionType], OptionType] = None, doc: str = None) -> None:
         """
         @param name: Optional name. If omitted, will be set to the name of the attribute.
-        @param default: Optional default value. Its type will be verified.
+        @param default: Optional default value or callable that returns default. Its type will be verified.
         @param doc: Optional docstring for the option.
         """
         super().__init__()
@@ -82,6 +82,11 @@ class Option(Generic[OptionType]):
         self._name = self._name if self._name is not None else name
 
     def resolve_default(self, instance: 'Config') -> OptionType:
+        """
+        Resolve default value for the option.
+
+        Subclasses can override this for an opportunity to transform default instance was initialized with.
+        """
         if self._is_default_valid is None:
             try:
                 instance.check_type(f'{self.name}[default]', self._default, attr_name=self._attr_name)
@@ -344,6 +349,8 @@ class ConfigOption(Option[ConfigOptionType]):
     '555-0100'
 
     @note: Retains a reference of assigned config, not a copy.
+
+    @note: If default is None, new Config will be created.
     """
     def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
         option_type = self.type

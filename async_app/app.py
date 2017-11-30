@@ -7,12 +7,15 @@ import logging.handlers
 import signal
 import sys
 import threading
-from typing import Awaitable, Callable, Generic, GenericMeta, Optional, Type, TypeVar
+from typing import Any, Awaitable, Callable, Generic, GenericMeta, Optional, Type, TypeVar
 import weakref
 
 from .config import Config
 
 LOG = logging.getLogger(__name__)
+
+
+Self = TypeVar('Self')
 
 
 class Runnable(abc.ABC, collections.Awaitable):
@@ -21,7 +24,7 @@ class Runnable(abc.ABC, collections.Awaitable):
       - `initialize` is called only once, and is the best place to allocate task-related resources or abort execution
         entirely due to some precondition
       - `main` is where all the work happens
-      - `cleanup` is called only once when main returns or raises and therefore is a good place to clean up
+      - `cleanup` is called only once after main returns or raises
 
     Each runnable has an associated `name` (ivar) and `LOG` (cvar):
       - `name` defaults to classname and can be customized via `__init__`
@@ -52,7 +55,7 @@ class Runnable(abc.ABC, collections.Awaitable):
 
     @cvar LOG: For each subclass new LOG variable is automatically created unless explicitly set.
     """
-    LOG = LOG.getChild('Runnable')
+    LOG: logging.Logger = LOG.getChild('Runnable')
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -60,7 +63,7 @@ class Runnable(abc.ABC, collections.Awaitable):
         if 'LOG' not in cls.__dict__:
             cls.LOG = logging.getLogger('{}.{}'.format(cls.__module__, cls.__qualname__))
 
-    def __init__(self, *, name=None):
+    def __init__(self, *, name: str = None) -> None:
         self._name = name or type(self).__name__
 
         self._run_f = None
@@ -74,58 +77,57 @@ class Runnable(abc.ABC, collections.Awaitable):
         self._is_aborted = False
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
         Name of the runnable.
-
-        @rtype: str
         """
         return self._name
 
     @property
-    def should_stop(self):
+    def should_stop(self) -> bool:
         """
         Whether runnable should stop.
-
-        @rtype: bool
         """
         return self._should_stop
 
     @property
-    def is_initialized(self):
+    def is_initialized(self) -> bool:
         """
-        Whether runnable is initialized
+        Whether runnable is initialized.
 
-        @rtype: bool
+        Can be used to detect errors during initialization.
         """
         return self._is_initialized
 
     @property
-    def is_aborted(self):
+    def is_aborted(self) -> bool:
         """
         Whether runnable is aborted, e.g. due to exception.
-
-        @rtype: bool
         """
         return self._is_aborted
 
     @property
-    def is_alive(self):
+    def is_started(self) -> bool:
         """
-        Whether task is scheduled and still running.
+        Whether task is started.
+        """
+        return self._run_f is not None
+
+    @property
+    def is_alive(self) -> bool:
+        """
+        Whether task was started and still running.
         """
         return self._run_f and not self._run_f.done()
 
     @property
-    def is_done(self):
+    def is_done(self) -> bool:
         """
-        Whether runnable was started and completed its execution.
-
-        @rtype: bool
+        Whether task was started and completed its execution.
         """
         return self._run_f and self._run_f.done()
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """
         Convenience method that's called only once before `main`.
 
@@ -149,13 +151,13 @@ class Runnable(abc.ABC, collections.Awaitable):
         """
         pass
 
-    async def cleanup(self, exc_type=None, exc_val=None, exc_tb=None):
+    async def cleanup(self, exc_type=None, exc_val=None, exc_tb=None) -> None:
         """
         Convenience method that's called only once after `main` exits.
         """
         pass
 
-    def start(self, *, loop=None):
+    def start(self: Self, *, loop: asyncio.AbstractEventLoop = None) -> Self:
         """
         Schedule runnable execution.
 
@@ -190,7 +192,7 @@ class Runnable(abc.ABC, collections.Awaitable):
         try:
             self._main_f = asyncio.ensure_future(self.main())
             self._main_f.add_done_callback(self.on_main_done)
-            await self._main_f
+            result = await self._main_f
         except:
             self._cleanup_f = asyncio.ensure_future(self.cleanup(*sys.exc_info()))
             self._cleanup_f.add_done_callback(self.on_cleanup_done)
@@ -200,8 +202,9 @@ class Runnable(abc.ABC, collections.Awaitable):
             self._cleanup_f = asyncio.ensure_future(self.cleanup())
             self._cleanup_f.add_done_callback(self.on_cleanup_done)
             await self._cleanup_f
+            return result
 
-    def stop(self):
+    def stop(self) -> None:
         """
         Stop runnable by cancelling wrapped task.
         """
@@ -213,7 +216,7 @@ class Runnable(abc.ABC, collections.Awaitable):
             if self._run_f:
                 self._run_f.cancel()
 
-    def abort(self):
+    def abort(self) -> None:
         """
         Same as stop, but sets the abort flag.
 
@@ -223,7 +226,7 @@ class Runnable(abc.ABC, collections.Awaitable):
         self._is_aborted = True
         self.stop()
 
-    def on_run_done(self, f):
+    def on_run_done(self, f: asyncio.Task) -> None:
         """
         Called when the run task is done.
         """
@@ -240,19 +243,19 @@ class Runnable(abc.ABC, collections.Awaitable):
 
         self._should_stop = True
 
-    def on_initialize_done(self, f):
+    def on_initialize_done(self, f: asyncio.Task) -> None:
         """
         Called when the initialize task is done.
         """
         assert f == self._initialize_f
 
-    def on_main_done(self, f):
+    def on_main_done(self, f: asyncio.Task) -> None:
         """
         Called when the main task is done.
         """
         assert f == self._main_f
 
-    def on_cleanup_done(self, f):
+    def on_cleanup_done(self, f: asyncio.Task) -> None:
         """
         Called when the cleanup task is done.
         """
@@ -293,7 +296,7 @@ class AppLocal(threading.local):
         self.map = weakref.WeakValueDictionary()
 
 
-class _ServiceMakerMixin:
+class ServiceMakerMixin:
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._make_service_dispatcher = functools.singledispatch(cls._make_service)
@@ -309,7 +312,7 @@ class _ServiceMakerMixin:
         return service_type(*args, **kwargs)
 
 
-class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
+class App(Runnable, ServiceMakerMixin, Generic[ConfigType]):
     """
     App is the root runnable for the application.
 
@@ -334,7 +337,7 @@ class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
     app_local = AppLocal()
 
     @classmethod
-    def current_app(cls: Type[AppType], loop=None) -> Optional[AppType]:
+    def current_app(cls: Type[AppType], loop: asyncio.AbstractEventLoop = None) -> Optional[AppType]:
         # TODO: Use PEP 550.
         apps_map = cls.app_local.map
 
@@ -356,7 +359,7 @@ class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
         super(GenericMeta, cls).__setattr__('_gorg', cls)
         super().__init_subclass__(**kwargs)
 
-    def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None):
+    def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None) -> None:
         """
         @param target: Coroutine that will be awaited. If None, main must be overridden.
         """
@@ -368,7 +371,7 @@ class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
     def config(self) -> Optional[ConfigType]:
         return self._config
 
-    def exec(self, *, loop=None):
+    def exec(self, *, loop: asyncio.AbstractEventLoop = None) -> None:
         loop = loop or asyncio.get_event_loop()
 
         apps_map = self.app_local.map
@@ -408,7 +411,7 @@ class App(Runnable, _ServiceMakerMixin, Generic[ConfigType]):
 AppType = TypeVar('AppType', bound=App)
 
 
-class Service(Runnable, _ServiceMakerMixin, Generic[AppType, ConfigType]):
+class Service(Runnable, ServiceMakerMixin, Generic[AppType, ConfigType]):
     """
     Service implements asynchronous task for the app.
 
@@ -418,13 +421,23 @@ class Service(Runnable, _ServiceMakerMixin, Generic[AppType, ConfigType]):
         super(GenericMeta, cls).__setattr__('_gorg', cls)
         super().__init_subclass__(**kwargs)
 
-    def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None):
+    def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None) -> None:
         """
         @param app: App that owns the service. If None, will be resolved at the beginning of the service's execution.
         """
         super().__init__(name=name)
         self._app = app
         self._config = config
+
+    @property
+    def app(self) -> Optional[AppType]:
+        return self._app
+
+    @property
+    def config(self) -> Optional[ConfigType]:
+        return self._config or self.app.config
+
+    #{ Runnable
 
     async def run(self, *args, **kwargs):
         current_app = App.current_app()
@@ -436,13 +449,7 @@ class Service(Runnable, _ServiceMakerMixin, Generic[AppType, ConfigType]):
 
         return await super().run(*args, **kwargs)
 
-    @property
-    def app(self) -> Optional[AppType]:
-        return self._app
-
-    @property
-    def config(self) -> Optional[ConfigType]:
-        return self._config or self.app.config
+    #{ ServiceMakerMixin
 
     def _make_service(self, service_type, *args, **kwargs):
         if self.app:
@@ -453,7 +460,7 @@ class Service(Runnable, _ServiceMakerMixin, Generic[AppType, ConfigType]):
 
 def make_service(service_type):
     """
-    Mark which service factory method should create.
+    Register instance method with the make_service dispatch registry.
 
     >>> class MyService(Service)
     >>>     def __init__(self, *, value, **kwargs):
