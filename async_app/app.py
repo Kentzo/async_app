@@ -412,7 +412,7 @@ class Service(Runnable, Generic[AppType, ConfigType]):
     async def run(self, *args, **kwargs):
         current_app = App.current_app()
 
-        if self._app is None and current_app is None:
+        if current_app is None:
             raise RuntimeError(f"{self.name} must run inside an app")
         elif self._app is None:
             self._app = current_app
