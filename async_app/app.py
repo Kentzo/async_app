@@ -343,18 +343,24 @@ class App(Runnable, Generic[ConfigType]):
     def exec(self, *, loop: asyncio.AbstractEventLoop = None) -> None:
         loop = loop or asyncio.get_event_loop()
 
-        loop_ref = weakref.ref(loop, lambda ref: self.__class__._current_apps.pop(ref, None))
-        self.__class__._current_apps[loop_ref] = self
-
         try:
             t = self.start(loop=loop)
             loop.run_until_complete(t)
         except asyncio.CancelledError:
             self.LOG.debug("%s is cancelled.", self.name)
-        finally:
-            del self.__class__._current_apps[loop_ref]
 
     #{ Runnable
+
+    async def run(self):
+        loop = asyncio.get_event_loop()
+
+        loop_ref = weakref.ref(loop, lambda ref: self.__class__._current_apps.pop(ref, None))
+        self.__class__._current_apps[loop_ref] = self
+
+        try:
+            await super().run()
+        finally:
+            del self.__class__._current_apps[loop_ref]
 
     async def initialize(self):
         await super().initialize()

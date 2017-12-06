@@ -476,11 +476,10 @@ class TestApp(TestCase):
         App(target=S()).exec()
 
     def test_target_awaitable(self):
-        class S(Service):
-            async def main(self):
-                pass
+        async def main():
+            pass
 
-        App(target=S().start()).exec()
+        App(target=asyncio.ensure_future(main())).exec()
 
     def test_target_function(self):
         class S(Service):
