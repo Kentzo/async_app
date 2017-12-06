@@ -20,24 +20,33 @@ class RaisingStubRunnable(Runnable):
 
 class TestRunnable(TestCase):
     def assert_is_not_running(self, runnable):
+        self.assertFalse(runnable.is_started)
         self.assertFalse(runnable.is_alive)
         self.assertFalse(runnable.is_done)
+
+        self.assertFalse(runnable.is_initialized)
 
     def assert_is_alive(self, runnable):
+        self.assertTrue(runnable.is_started)
         self.assertTrue(runnable.is_alive)
         self.assertFalse(runnable.is_done)
-
-    def assert_is_done(self, runnable):
-        self.assertFalse(runnable.is_alive)
-        self.assertTrue(runnable.is_done)
-        self.assertTrue(runnable.should_stop)
         self.assertFalse(runnable.is_aborted)
 
-    def assert_is_aborted(self, runnable):
+    def assert_is_done(self, runnable):
+        self.assertTrue(runnable.is_started)
         self.assertFalse(runnable.is_alive)
         self.assertTrue(runnable.is_done)
+        self.assertFalse(runnable.is_aborted)
+
         self.assertTrue(runnable.should_stop)
+
+    def assert_is_aborted(self, runnable):
+        self.assertTrue(runnable.is_started)
+        self.assertFalse(runnable.is_alive)
+        self.assertTrue(runnable.is_done)
         self.assertTrue(runnable.is_aborted)
+
+        self.assertTrue(runnable.should_stop)
 
     @with_timeout()
     async def test_initialize_sets_is_initialized(self):
@@ -459,6 +468,26 @@ class TestApp(TestCase):
         with self.assertRaises(NotImplementedError):
             App(target=None).exec()
 
+    def test_target_runnable(self):
+        class S(Service):
+            async def main(self):
+                pass
+
+        App(target=S()).exec()
+
+    def test_target_awaitable(self):
+        class S(Service):
+            async def main(self):
+                pass
+
+        App(target=S().start()).exec()
+
+    def test_target_function(self):
+        class S(Service):
+            async def main(self):
+                pass
+
+        App(target=S().start).exec()
 
 
 class TestService(TestCase):
@@ -492,3 +521,23 @@ class TestService(TestCase):
 
         app._target = foo
         app.exec()
+
+    async def test_app_is_required(self):
+        class S(Service):
+            async def main(self):
+                pass
+
+        with self.assertRaises(RuntimeError):
+            await S().start()
+
+    def test_app_mismatch_raises(self):
+        class S(Service):
+            async def main(self):
+                pass
+
+        app1 = App()
+        s = S(app=app1)
+        app2 = App(target=s)
+
+        with self.assertRaises(RuntimeError):
+            app2.exec()

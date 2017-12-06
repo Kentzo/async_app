@@ -2,12 +2,11 @@ import abc
 import asyncio
 import collections
 import contextlib
-import functools
+import inspect
 import logging.handlers
 import signal
 import sys
-import threading
-from typing import Any, Awaitable, Callable, Generic, GenericMeta, Optional, Type, TypeVar
+from typing import Awaitable, Callable, Dict, Generic, GenericMeta, Optional, Type, TypeVar, Union
 import weakref
 
 from .config import Config
@@ -163,8 +162,6 @@ class Runnable(abc.ABC, collections.Awaitable):
 
         Create and configure underlying asyncio.Task.
 
-        @rtype: type(self)
-
         @raise RuntimeError: If started more than once.
         """
         if self._run_f:
@@ -289,13 +286,6 @@ ConfigType = TypeVar('ConfigType', bound=Config)
 ServiceType = TypeVar('ServiceType', bound='Service')
 
 
-class AppLocal(threading.local):
-    map = None
-
-    def __init__(self):
-        self.map = weakref.WeakValueDictionary()
-
-
 class App(Runnable, Generic[ConfigType]):
     """
     App is the root runnable for the application.
@@ -312,30 +302,25 @@ class App(Runnable, Generic[ConfigType]):
     >>>         await asyncio.gather(a_service, b_service)
     >>>
     >>> MyApp().exec()
-
-    App provides a factory method to create services: make_service
-    Subclasses of App (and Service) can override how service is created with the make_service decorator.
-
-    @see: make_service
     """
-    app_local = AppLocal()
+    _current_apps: Dict[weakref.ReferenceType, 'App'] = weakref.WeakValueDictionary()
 
     @classmethod
     def current_app(cls: Type[AppType], loop: asyncio.AbstractEventLoop = None) -> Optional[AppType]:
-        # TODO: Use PEP 550.
-        apps_map = cls.app_local.map
-
+        """
+        Return App for the current event loop.
+        """
         try:
             loop = loop or asyncio.get_event_loop()
             loop_ref = weakref.ref(loop)
         except RuntimeError:
-            LOG.warning("There is no current asyncio event loop.")
+            cls.LOG.warning("There is no current asyncio event loop.")
             return None
 
-        app = apps_map.get(loop_ref)
+        app = cls._current_apps.get(loop_ref)
 
         if app is None:
-            LOG.debug("There is no active App in event loop %s.", loop)
+            cls.LOG.debug("There is no active App in event loop %s.", loop)
 
         return app
 
@@ -343,9 +328,9 @@ class App(Runnable, Generic[ConfigType]):
         super(GenericMeta, cls).__setattr__('_gorg', cls)
         super().__init_subclass__(**kwargs)
 
-    def __init__(self, target: Callable[[], Awaitable] = None, *, config: ConfigType = None, name: str = None) -> None:
+    def __init__(self, target: Union[Callable[[], Awaitable], Runnable] = None, *, config: ConfigType = None, name: str = None) -> None:
         """
-        @param target: Coroutine that will be awaited. If None, main must be overridden.
+        @param target: Either coroutine or Runnable that will be awaited. If None, main must be overridden.
         """
         super().__init__(name=name)
         self._target = target
@@ -358,17 +343,16 @@ class App(Runnable, Generic[ConfigType]):
     def exec(self, *, loop: asyncio.AbstractEventLoop = None) -> None:
         loop = loop or asyncio.get_event_loop()
 
-        apps_map = self.app_local.map
-        loop_ref = weakref.ref(loop, lambda ref: self.app_local.map.pop(ref, None))
-        apps_map[loop_ref] = self
+        loop_ref = weakref.ref(loop, lambda ref: self.__class__._current_apps.pop(ref, None))
+        self.__class__._current_apps[loop_ref] = self
 
         try:
             t = self.start(loop=loop)
             loop.run_until_complete(t)
         except asyncio.CancelledError:
-            pass
+            self.LOG.debug("%s is cancelled.", self.name)
         finally:
-            del apps_map[loop_ref]
+            del self.__class__._current_apps[loop_ref]
 
     #{ Runnable
 
@@ -385,14 +369,16 @@ class App(Runnable, Generic[ConfigType]):
 
     async def main(self):
         if self._target:
-            await asyncio.ensure_future(self._target())
+            if isinstance(self._target, Runnable) and not self._target.is_started:
+                await self._target.start()
+            elif inspect.isawaitable(self._target):
+                await self._target
+            else:
+                await asyncio.ensure_future(self._target())
         else:
             raise NotImplementedError("either pass \"target\" or override main")
 
     #}
-
-
-AppType = TypeVar('AppType', bound=App)
 
 
 class Service(Runnable, Generic[AppType, ConfigType]):
@@ -426,7 +412,9 @@ class Service(Runnable, Generic[AppType, ConfigType]):
     async def run(self, *args, **kwargs):
         current_app = App.current_app()
 
-        if self._app is None:
+        if self._app is None and current_app is None:
+            raise RuntimeError(f"{self.name} must run inside an app")
+        elif self._app is None:
             self._app = current_app
         elif self._app != current_app:
             raise RuntimeError(f"{self.name} should run in {self._app.name} but runs in {current_app.name} instead")
