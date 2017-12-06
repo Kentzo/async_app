@@ -303,6 +303,13 @@ class App(Runnable, Generic[ConfigType]):
     >>>         await asyncio.gather(a_service, b_service)
     >>>
     >>> MyApp().exec()
+
+    Alternatively:
+
+    >>> async with App():
+    >>>     a_service = ...
+    >>>     b_service = ...
+    >>>     await asyncio.gather(a_service, b_service)
     """
     _current_apps: Dict[weakref.ReferenceType, 'App'] = weakref.WeakValueDictionary()
 
@@ -341,7 +348,12 @@ class App(Runnable, Generic[ConfigType]):
     def config(self) -> Optional[ConfigType]:
         return self._config
 
-    def exec(self, *, loop: asyncio.AbstractEventLoop = None) -> None:
+    def exec(self, *, loop: asyncio.AbstractEventLoop = None):
+        """
+        Convenience method to start and await completion of the application.
+
+        CancelledError is ignored as an expected way to complete execution.
+        """
         loop = loop or asyncio.get_event_loop()
 
         try:
@@ -349,6 +361,12 @@ class App(Runnable, Generic[ConfigType]):
             return loop.run_until_complete(t)
         except asyncio.CancelledError:
             self.LOG.debug("%s is cancelled.", self.name)
+
+    async def __aenter__(self):
+        return self.start()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self
 
     #{ Runnable
 
@@ -383,16 +401,14 @@ class App(Runnable, Generic[ConfigType]):
             else:
                 return await asyncio.ensure_future(self._target())
         else:
-            raise NotImplementedError("either pass \"target\" or override main")
+            self.LOG.warning("Neither \"target\" is specified nor main is overridden for %s.", self.name)
 
     #}
 
 
 class Service(Runnable, Generic[AppType, ConfigType]):
     """
-    Service implements asynchronous task for the app.
-
-    Almost like vanilla Runnable with attributes to access app, config and factory method for services.
+    Service is an asynchronous task for the app.
     """
     def __init_subclass__(cls, **kwargs):
         super(GenericMeta, cls).__setattr__('_gorg', cls)
@@ -401,6 +417,7 @@ class Service(Runnable, Generic[AppType, ConfigType]):
     def __init__(self, *, app: AppType = None, config: ConfigType = None, name: str = None) -> None:
         """
         @param app: App that owns the service. If None, will be resolved at the beginning of the service's execution.
+        @param config: Custom config.
         """
         super().__init__(name=name)
         self._app = app

@@ -464,10 +464,6 @@ class TestApp(TestCase):
 
         App(target=bar).exec()
 
-    def test_exec_requires_target(self):
-        with self.assertRaises(NotImplementedError):
-            App(target=None).exec()
-
     def test_target_runnable(self):
         class S(Service):
             async def main(self):
@@ -487,6 +483,14 @@ class TestApp(TestCase):
                 return 42
 
         self.assertEqual(App(target=S().start).exec(), 42)
+
+    async def test_context_manager(self):
+        class S(Service):
+            async def main(self):
+                return 42
+
+        async with App():
+            self.assertEqual(await S().start(), 42)
 
 
 class TestService(TestCase):
