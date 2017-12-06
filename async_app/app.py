@@ -199,7 +199,8 @@ class Runnable(abc.ABC, collections.Awaitable):
             self._cleanup_f = asyncio.ensure_future(self.cleanup())
             self._cleanup_f.add_done_callback(self.on_cleanup_done)
             await self._cleanup_f
-            return result
+
+        return result
 
     def stop(self) -> None:
         """
@@ -345,7 +346,7 @@ class App(Runnable, Generic[ConfigType]):
 
         try:
             t = self.start(loop=loop)
-            loop.run_until_complete(t)
+            return loop.run_until_complete(t)
         except asyncio.CancelledError:
             self.LOG.debug("%s is cancelled.", self.name)
 
@@ -358,7 +359,7 @@ class App(Runnable, Generic[ConfigType]):
         self.__class__._current_apps[loop_ref] = self
 
         try:
-            await super().run()
+            return await super().run()
         finally:
             del self.__class__._current_apps[loop_ref]
 
@@ -376,11 +377,11 @@ class App(Runnable, Generic[ConfigType]):
     async def main(self):
         if self._target:
             if isinstance(self._target, Runnable) and not self._target.is_started:
-                await self._target.start()
+                return await self._target.start()
             elif inspect.isawaitable(self._target):
-                await self._target
+                return await self._target
             else:
-                await asyncio.ensure_future(self._target())
+                return await asyncio.ensure_future(self._target())
         else:
             raise NotImplementedError("either pass \"target\" or override main")
 

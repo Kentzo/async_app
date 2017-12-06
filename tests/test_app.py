@@ -471,22 +471,22 @@ class TestApp(TestCase):
     def test_target_runnable(self):
         class S(Service):
             async def main(self):
-                pass
+                return 42
 
-        App(target=S()).exec()
+        self.assertEqual(App(target=S()).exec(), 42)
 
     def test_target_awaitable(self):
         async def main():
-            pass
+            return 42
 
-        App(target=asyncio.ensure_future(main())).exec()
+        self.assertEqual(App(target=asyncio.ensure_future(main())).exec(), 42)
 
     def test_target_function(self):
         class S(Service):
             async def main(self):
-                pass
+                return 42
 
-        App(target=S().start).exec()
+        self.assertEqual(App(target=S().start).exec(), 42)
 
 
 class TestService(TestCase):
