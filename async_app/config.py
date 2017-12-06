@@ -173,10 +173,6 @@ class Config(UserDict):
     _option_attrs: ClassVar[Dict[str, Option]]  # attr name -> attr
     _option_names: ClassVar[Dict[str, str]]  # option name -> attr name
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.default = {}
-
     @classmethod
     def check_type(cls, name: str, value: OptionType, *, attr_name: str = None, expected_type: Type[OptionType] = None):
         """
@@ -204,6 +200,10 @@ class Config(UserDict):
             expected_type = cls._option_types.get(attr_name, Any)
 
         typeguard.check_type(name, value, expected_type, None)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.default = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
