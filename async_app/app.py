@@ -362,12 +362,6 @@ class App(Runnable, Generic[ConfigType]):
         except asyncio.CancelledError:
             self.LOG.debug("%s is cancelled.", self.name)
 
-    async def __aenter__(self):
-        return self.start()
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self
-
     #{ Runnable
 
     async def run(self):
@@ -444,3 +438,5 @@ class Service(Runnable, Generic[AppType, ConfigType]):
             raise RuntimeError(f"{self.name} should run in {self._app.name} but runs in {current_app.name} instead")
 
         return await super().run(*args, **kwargs)
+
+    #}
