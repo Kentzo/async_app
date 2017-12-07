@@ -17,7 +17,7 @@ LOG = logging.getLogger(__name__)
 Self = TypeVar('Self')
 
 
-class Runnable(abc.ABC, collections.Awaitable):
+class Runnable(collections.Awaitable):
     """
     Runnable is a convenience wrapper around asyncio.Task with distinct flow:
       - `initialize` is called only once, and is the best place to allocate task-related resources or abort execution
@@ -232,12 +232,12 @@ class Runnable(abc.ABC, collections.Awaitable):
 
         if self._run_f.cancelled():
             if not self._should_stop:
-                self.LOG.debug("\"%s\" was manually cancelled.", self.name)
+                self.LOG.info("\"%s\" task was manually cancelled.", self.name)
         elif self._run_f.exception() is not None:
-            self.LOG.debug("\"%s\" failed.", self.name)
+            self.LOG.exception("\"%s\" task failed with exception:", self.name, exc_info=self._run_f.exception())
             self._is_aborted = True
         else:
-            self.LOG.debug("\"%s\" succeed.", self.name)
+            self.LOG.debug("\"%s\" task finished.", self.name)
 
         self._should_stop = True
 
@@ -360,7 +360,7 @@ class App(Runnable, Generic[ConfigType]):
             t = self.start(loop=loop)
             return loop.run_until_complete(t)
         except asyncio.CancelledError:
-            self.LOG.debug("\"%s\" is cancelled.", self.name)
+            self.LOG.info("\"%s\" is cancelled.", self.name)
 
     #{ Runnable
 
