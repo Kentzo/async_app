@@ -232,12 +232,12 @@ class Runnable(abc.ABC, collections.Awaitable):
 
         if self._run_f.cancelled():
             if not self._should_stop:
-                self.LOG.debug("\"%s\" was manually cancelled.")
+                self.LOG.debug("\"%s\" was manually cancelled.", self.name)
         elif self._run_f.exception() is not None:
-            self.LOG.debug("\"%s\" failed.")
+            self.LOG.debug("\"%s\" failed.", self.name)
             self._is_aborted = True
         else:
-            self.LOG.debug("\"%s\" succeed.")
+            self.LOG.debug("\"%s\" succeed.", self.name)
 
         self._should_stop = True
 
@@ -360,7 +360,7 @@ class App(Runnable, Generic[ConfigType]):
             t = self.start(loop=loop)
             return loop.run_until_complete(t)
         except asyncio.CancelledError:
-            self.LOG.debug("%s is cancelled.", self.name)
+            self.LOG.debug("\"%s\" is cancelled.", self.name)
 
     #{ Runnable
 
@@ -395,7 +395,7 @@ class App(Runnable, Generic[ConfigType]):
             else:
                 return await asyncio.ensure_future(self._target())
         else:
-            self.LOG.warning("Neither \"target\" is specified nor main is overridden for %s.", self.name)
+            self.LOG.warning("Neither \"target\" is specified nor main is overridden for \"%s\".", self.name)
 
     #}
 
