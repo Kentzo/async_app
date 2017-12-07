@@ -394,8 +394,6 @@ class App(Runnable, Generic[ConfigType]):
                 return await self._target
             else:
                 return await asyncio.ensure_future(self._target())
-        else:
-            self.LOG.warning("Neither \"target\" is specified nor main is overridden for \"%s\".", self.name)
 
     #}
 
