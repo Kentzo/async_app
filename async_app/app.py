@@ -343,6 +343,8 @@ class App(Runnable, Generic[ConfigType]):
         super().__init__(name=name)
         self._target = target
         self._config = config
+        self._is_context = False
+        self._loop_ref = None
 
     @property
     def config(self) -> Optional[ConfigType]:
@@ -364,16 +366,22 @@ class App(Runnable, Generic[ConfigType]):
 
     #{ Runnable
 
-    async def run(self):
-        loop = asyncio.get_event_loop()
+    def start(self, *, loop=None):
+        loop = loop or asyncio.get_event_loop()
+        self._loop_ref = weakref.ref(loop, lambda ref: self.__class__._current_apps.pop(ref, None))
 
-        loop_ref = weakref.ref(loop, lambda ref: self.__class__._current_apps.pop(ref, None))
-        self.__class__._current_apps[loop_ref] = self
+        if self._loop_ref in self.__class__._current_apps:
+            raise RuntimeError("only one app can be active in an event loop")
+        else:
+            self.__class__._current_apps[self._loop_ref] = self
 
-        try:
-            return await super().run()
-        finally:
-            del self.__class__._current_apps[loop_ref]
+        return super().start(loop=loop)
+
+    def on_run_done(self, f):
+        super().on_run_done(f)
+
+        if not self._is_context:
+            del self.__class__._current_apps[self._loop_ref]
 
     async def initialize(self):
         await super().initialize()
@@ -395,6 +403,17 @@ class App(Runnable, Generic[ConfigType]):
             else:
                 return await asyncio.ensure_future(self._target())
 
+    async def __aenter__(self):
+        r = await super().__aenter__()
+        self._is_context = True
+        return r
+
+    async def __aexit__(self, *args, **kwargs):
+        try:
+            return await super().__aexit__(*args, **kwargs)
+        finally:
+            del self.__class__._current_apps[self._loop_ref]
+            self._is_context = False
     #}
 
 

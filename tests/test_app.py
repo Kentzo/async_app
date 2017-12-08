@@ -489,8 +489,24 @@ class TestApp(TestCase):
             async def main(self):
                 return 42
 
-        async with App():
+        async with App() as app:
+            await app
             self.assertEqual(await S().start(), 42)
+
+        with self.assertRaises(RuntimeError):
+            await S().start()
+
+    async def test_one_app_per_loop(self):
+        app1 = App()
+        app1.start()
+
+        with self.assertRaises(RuntimeError):
+            App().start()
+
+        await app1
+
+        app2 = App()
+        await app2.start()
 
 
 class TestService(TestCase):
