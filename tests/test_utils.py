@@ -2,7 +2,7 @@ import asyncio
 import unittest.mock
 
 from async_app.utils import AsyncExitStack, TaskGroup, wait_one
-from asynctest import TestCase
+from asynctest import TestCase, fail_on
 
 from . import with_timeout
 
@@ -190,3 +190,14 @@ class TeatAsyncExitStack(TestCase):
 
         self.assertListEqual(enter_queue, [master, slave])
         self.assertListEqual(exit_queue, [slave, master])
+
+    @fail_on(unused_loop=False)
+    @with_timeout
+    async def test_exception(self):
+        with self.assertRaises(asyncio.CancelledError):
+            async with AsyncExitStack():
+                raise asyncio.CancelledError()
+
+        with self.assertRaises(RuntimeError):
+            async with AsyncExitStack():
+                raise RuntimeError()
