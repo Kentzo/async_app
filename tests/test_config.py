@@ -121,6 +121,8 @@ class TestConfig(unittest.TestCase):
             class MyConfig(Config):
                 name: str = Option(default=42)
 
+            MyConfig().name
+
     def test_check_initialdata(self):
         class MyConfig(Config):
             name: str = Option(default='foo')
@@ -272,7 +274,7 @@ class TestConfig(unittest.TestCase):
                 check_type_mock.reset_mock()
                 class MyConfig(Config):
                     name: str = Option(default='foo')
-                check_type_mock.assert_called_once_with('name[default]', 'foo', expected_type=str)
+                check_type_mock.assert_not_called()
 
                 check_type_mock.reset_mock()
                 class MyConfig(Config):
@@ -429,15 +431,30 @@ class TestConfigOption(unittest.TestCase):
         class SubConfig(Config):
             o: int = Option(default=42)
 
-        class MyConfig(Config):
-            sub: SubConfig = ConfigOption()
+        with self.subTest('no default'):
+            class MyConfig(Config):
+                sub: SubConfig = ConfigOption()
 
-        self.assertEqual(MyConfig().sub.o, 42)
+            self.assertEqual(MyConfig().sub.o, 42)
 
-        a = MyConfig()
-        a.sub.o = 9000
-        b = MyConfig()
-        self.assertEqual(b.sub.o, 42)
+            a = MyConfig()
+            a.sub.o = 9000
+            b = MyConfig()
+            self.assertEqual(b.sub.o, 42)
+
+        with self.subTest('callable'):
+            class MyConfig(Config):
+                sub: SubConfig = ConfigOption(default=SubConfig)
+
+            self.assertEqual(MyConfig().sub.o, 42)
+
+        with self.subTest('instance'):
+            default = SubConfig()
+
+            class MyConfig(Config):
+                sub: SubConfig = ConfigOption(default=default)
+
+            self.assertIsNot(MyConfig().sub, default)
 
     def test_get_nested(self):
         class SubConfig(Config):
@@ -503,6 +520,9 @@ class TestConfigOption(unittest.TestCase):
 
         with self.assertRaises(TypeError):
             MyConfig().pop_nested(())
+
+        with self.assertRaises(TypeError):
+            MyConfig().pop_nested(('sub'), 42, 9000)
 
 
 class TestChainConfig(unittest.TestCase):

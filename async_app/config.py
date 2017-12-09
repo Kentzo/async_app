@@ -2,6 +2,7 @@
 The Config container is a typed dict-like class to store application's config.
 """
 from collections import ChainMap, UserDict, OrderedDict
+import copy
 from typing import Any, Callable, ClassVar, Dict, Generic, GenericMeta, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
 
 import typeguard
@@ -64,13 +65,14 @@ class Option(Generic[OptionType]):
             elif self.name in instance.default:
                 return instance.default[self.name]
             else:
-                d = self.resolve_default(instance)
+                d = self.resolve_value(instance, self.resolve_default(instance, self._default))
                 instance.default[self.name] = d
                 return d
         else:
             return self
 
     def __set__(self, instance: 'Config', value: OptionType) -> None:
+        value = self.resolve_value(instance, value)
         instance.check_type(self.name, value, attr_name=self._attr_name)
         instance.data[self.name] = value
 
@@ -85,11 +87,19 @@ class Option(Generic[OptionType]):
         self._attr_name = name
         self._name = self._name if self._name is not None else name
 
-    def resolve_default(self, instance: 'Config') -> OptionType:
+    def resolve_default(self, instance: 'Config', default: OptionType) -> OptionType:
         """
-        Resolve default value for the option.
+        Called before default is set.
 
-        Subclasses can override this for an opportunity to transform default instance was initialized with.
+        Subclasses can override this to provide custom default.
+
+        >>> class DictOption(Option[Dict]):
+        >>>     '''Make a copy of a default dict.'''
+        >>>     def resolve_default(self, instance, default):
+        >>>         if isinstance(default, dict):
+        >>>             return dict(default)
+        >>>         else:
+        >>>             return super().resolve_default(instance, default)
         """
         if self._is_default_valid is None:
             try:
@@ -108,6 +118,38 @@ class Option(Generic[OptionType]):
             raise TypeError(f"{self._default} is not allowed default for {self.name}")
 
         return d
+
+    def resolve_value(self, instance: 'Config', value: OptionType):
+        """
+        Called before value is set.
+
+        Subclasses can override to transform value.
+
+        >>> class PathOption(Option[Path]):
+        >>>     '''Transform str to Path'''
+        >>>     def resolve_value(self, instance, value):
+        >>>         if isinstance(value, str):
+        >>>             return Path(value)
+        >>>         else:
+        >>>             return super().resolve_value(value)
+        """
+        return value
+
+    def resolve_type(self, owner: Type['Config'], option_type):
+        """
+        Called before type is set.
+
+        Subclass can override this to perform additional checks.
+
+        >>> class FloatOption(Option[float]):
+        >>>     '''Require explicit float annotation'''
+        >>>     def resolve_type(self, owner, option_type):
+        >>>         if not issubclass(option_type, float):
+        >>>             raise RuntimeError
+        >>>         else:
+        >>>             return super().resolve_type(owner, option_type)
+        """
+        return option_type
 
 
 class Config(UserDict):
@@ -231,14 +273,7 @@ class Config(UserDict):
             if attr.name in option_names and option_names[attr.name] != attr_name:
                 raise AttributeError(f"mismatched override: {option_names[attr.name]} != {attr_name} for {attr.name}")
 
-            attr_type = type_hints.get(attr_name, Any)
-
-            if isinstance(attr, ConfigOption) and not issubclass(attr_type, Config):
-                raise TypeError(f'{attr_name} must have annotation of type Config')
-
-            # None and callable are resolved during instantiation.
-            if attr._default is not None and not callable(attr._default):
-                cls.check_type(f'{attr.name}[default]', attr._default, expected_type=attr_type)
+            attr_type = attr.resolve_type(cls, type_hints.get(attr_name, Any))
 
             if attr._doc is None:
                 attr.__doc__ = attr_type.__doc__
@@ -254,6 +289,10 @@ class Config(UserDict):
     def get_nested(self, keys: Iterable[Hashable], default=None):
         """
         Return the value for keys if each key references a nested object that implements __getitem__, else default.
+
+        >>> c = Config({'a': {'b': {'c': 42}}})
+        >>> assert c.get_nested(('a', 'b', 'c')) == 42
+        >>> assert c.get_nested(('d', 'e', 'f'), 9000) == 9000
         """
         value = self
 
@@ -272,6 +311,10 @@ class Config(UserDict):
     def set_nested(self, keys: Iterable[Hashable], value) -> None:
         """
         Set the value for keys where each key references a nested object that implements __getitem__.
+
+        >>> c = Config({'a': {'b': {'c': None}}})
+        >>> c.set_nested(('a', 'b', 'c'), 42)
+        >>> assert c['a']['b']['c'] == 42
         """
         attr = self
         it = iter(keys)
@@ -289,8 +332,12 @@ class Config(UserDict):
 
     def pop_nested(self, keys: Iterable[Hashable], *args):
         """
-        If each key in keys references a nested obkect that implemented __getitem__, remove it and return its value,
+        If each key in keys references a nested object that implemented __getitem__, remove it and return its value,
         else return default.
+
+        >>> c = Config({'a': {'b': {'c': 42}}})
+        >>> assert c.pop_nested(('a', 'b', 'c')) == 42
+        >>> >>> assert c.pop_nested(('a', 'b', 'c'), 9000) == 9000
         """
         if len(args) > 1:
             raise TypeError("pop_nested expected at most 2 arguments, got 3")
@@ -301,7 +348,7 @@ class Config(UserDict):
         try:
             cur = next(it)
         except StopIteration:
-            raise TypeError("set_nested expected at least 1 key, got 0")
+            raise TypeError("pop_nested expected at least 1 key, got 0")
 
         try:
             for nxt in it:
@@ -318,7 +365,7 @@ class Config(UserDict):
     #{ UserDict
 
     def __getitem__(self, key):
-        option = self._option_attrs.get(key)
+        option = self.__class__._option_attrs.get(key)
 
         if option is not None:
             return option.__get__(self, type(self))
@@ -326,7 +373,7 @@ class Config(UserDict):
             return super().__getitem__(key)
 
     def __setitem__(self, key, value):
-        option = self._option_attrs.get(key)
+        option = self.__class__._option_attrs.get(key)
 
         if option is not None:
             option.__set__(self, value)
@@ -355,20 +402,29 @@ class ConfigOption(Option[ConfigOptionType]):
     @note: Retains a reference of assigned config, not a copy.
 
     @note: If default is None, new Config will be created.
+        If default is an instance of config, it will be deep copied.
     """
-    def __set__(self, instance: Config, value: Union[Dict, ConfigOptionType]) -> None:
+    def resolve_default(self, instance, default):
+        if default is None:
+            return self.type()
+        elif isinstance(default, self.type):
+            return copy.deepcopy(default)
+        else:
+            return super().resolve_default(instance, default)
+
+    def resolve_value(self, instance, value):
         option_type = self.type
 
         if not isinstance(value, option_type):
-            value = option_type(value)
-
-        super().__set__(instance, value)
-
-    def resolve_default(self, instance):
-        if self._default is None:
-            return self.type()
+            return option_type(value)
         else:
-            return super().resolve_default(instance)
+            return super().resolve_value(instance, value)
+
+    def resolve_type(self, owner, option_type):
+        if not issubclass(option_type, Config):
+            raise TypeError(f'{self.name} must have annotation of type Config')
+
+        return super().resolve_type(owner, option_type)
 
 
 class ChainConfig(ChainMap):
@@ -391,7 +447,7 @@ class ChainConfig(ChainMap):
 
         for i, mapping in enumerate(self.maps):
             try:
-                option = mapping._option_attrs[item]
+                option = mapping.__class__._option_attrs[item]
                 break
             except KeyError:
                 continue
