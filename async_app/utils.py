@@ -61,14 +61,17 @@ class TaskGroup(Collection[Awaitable]):
 
         if task not in self._tasks:
             self._tasks.add(task)
-            task.add_done_callback(self.remove_task)
+            task.add_done_callback(self._on_task_done)
 
         return task
 
     def remove_task(self, task) -> None:
-        self.LOG.debug("Done %s.", task)
-        task.remove_done_callback(self.remove_task)
+        task.remove_done_callback(self._on_task_done)
         self._tasks.remove(task)
+
+    def _on_task_done(self, task) -> None:
+        self.LOG.debug("Done %s.", task)
+        self.remove_task(task)
 
     async def __aenter__(self):
         return self
