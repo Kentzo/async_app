@@ -295,7 +295,7 @@ class AsyncExitStack(_BaseExitStack):
                     result = gen.send(result)
                 except StopIteration:
                     raise
-                except BaseException as e:
-                    result = gen.throw(e)
+                except:
+                    result = gen.throw(*sys.exc_info())
         except StopIteration as e:
             return e.value
