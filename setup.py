@@ -35,13 +35,13 @@ REQUIREMENTS = [
 TEST_REQUIREMENTS = [
     'asynctest',
     'pytest',
-    'pytest-cov'
 ]
 
 CI_REQUIREMENTS = TEST_REQUIREMENTS + [
     'codecov',
     'docutils',
-    'flake8'
+    'flake8',
+    'pytest-cov'
 ]
 
 
