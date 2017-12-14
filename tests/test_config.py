@@ -180,18 +180,6 @@ class TestConfig(unittest.TestCase):
                 class SubConfig(MyConfig):
                     first_name: str = Option('last_name')
 
-    def test_override_default(self):
-        class MyConfig(Config):
-            first_name = Option(default='foo')
-
-        class SubConfig(MyConfig):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.default['first_name'] = 'bar'
-
-        c = SubConfig()
-        self.assertEqual(c.first_name, 'bar')
-
     def test_optional(self):
         class MyConfig(Config):
             name: typing.Optional[str] = Option()
@@ -503,10 +491,7 @@ class TestConfigOption(unittest.TestCase):
         self.assertEqual(c.pop_nested(('sub', 'o')), 9000)
         self.assertEqual(c.sub.o, 42)
 
-        with self.assertRaises(KeyError):
-            MyConfig().pop_nested(('sub', 'o'))
-
-        self.assertEqual(MyConfig().pop_nested(('sub', 'o'), 9000), 9000)
+        MyConfig().pop_nested(('sub', 'o'))
 
         with self.assertRaises(KeyError):
             MyConfig().pop_nested(('foo',))

@@ -32,7 +32,8 @@ class Option(Generic[OptionType]):
     def __init__(self, name: str = None, *, default: Union[Callable[[], OptionType], OptionType] = None, doc: str = None) -> None:
         """
         @param name: Optional name. If omitted, will be set to the name of the attribute.
-        @param default: Optional default value or callable that returns default. Its type will be verified.
+        @param default: Optional default value or callable that returns default.
+            It's resolved on the first access and its type is verified.
         @param doc: Optional docstring for the option.
         """
         super().__init__()
@@ -62,11 +63,9 @@ class Option(Generic[OptionType]):
         if instance is not None:
             if self.name in instance.data:
                 return instance.data[self.name]
-            elif self.name in instance.default:
-                return instance.default[self.name]
             else:
                 d = self.resolve_value(instance, self.resolve_default(instance, self._default))
-                instance.default[self.name] = d
+                instance.data[self.name] = d
                 return d
         else:
             return self
@@ -206,11 +205,8 @@ class Config(UserDict):
     '555-0199'
     >>> print(e.get_nested(('contact', 'tel')))
     '555-0100'
-
-    @var default: Subclasses can set values there to override Option's default.
     """
     data: Dict
-    default: Dict[str, Any]  # option name -> default
     _option_types: ClassVar[Dict[str, type]]  # attr name -> expected attr type
     _option_attrs: ClassVar[Dict[str, Option]]  # attr name -> attr
     _option_names: ClassVar[Dict[str, str]]  # option name -> attr name
@@ -245,7 +241,6 @@ class Config(UserDict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default = {}
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
