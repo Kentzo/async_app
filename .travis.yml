@@ -24,6 +24,9 @@ matrix:
     - os: linux
       language: python
       python: 3.6
+      script:
+        - python setup.py test --pytest-args "--cov=async_app --cov-report=html --cov-branch --ignore=setup.py"
+        - python setup.py check -srm
       after_success:
         - flake8 async_app
         - codecov
