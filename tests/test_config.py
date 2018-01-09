@@ -1,7 +1,17 @@
 import typing
 import unittest.mock
 
-from async_app.config import Config, ChainConfig, Option, ConfigOption
+from async_app.config import Config, ChainConfig, Option, ConfigOption, _HAS_PYTYPES
+
+
+WITH_TYPE_CHECK = True
+try:
+    import typeguard
+except ImportError:
+    try:
+        import pytypes
+    except ImportError:
+        WITH_TYPE_CHECK = False
 
 
 class TestConfig(unittest.TestCase):
@@ -19,6 +29,7 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(KeyError):
                 MyConfig().data['name']
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_get_default_None(self):
         class MyConfig(Config):
             name: str = Option()
@@ -52,21 +63,7 @@ class TestConfig(unittest.TestCase):
             with self.assertRaises(KeyError):
                 MyConfig().data['name']
 
-    def test_get(self):
-        class MyConfig(Config):
-            name: str = Option(default='foo')
-
-        c = MyConfig(name='bar')
-
-        with self.subTest('attribute'):
-            self.assertEqual(c.name, 'bar')
-
-        with self.subTest('key'):
-            self.assertEqual(c['name'], 'bar')
-
-        with self.subTest('data key'):
-            self.assertEqual(c['name'], 'bar')
-
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_set(self):
         class MyConfig(Config):
             name: str = Option(default='foo')
@@ -94,6 +91,21 @@ class TestConfig(unittest.TestCase):
             c.data['name'] = 'bar'
             self.assertEqual(c.name, 'bar')
 
+    def test_get(self):
+        class MyConfig(Config):
+            name: str = Option(default='foo')
+
+        c = MyConfig(name='bar')
+
+        with self.subTest('attribute'):
+            self.assertEqual(c.name, 'bar')
+
+        with self.subTest('key'):
+            self.assertEqual(c['name'], 'bar')
+
+        with self.subTest('data key'):
+            self.assertEqual(c['name'], 'bar')
+
     def test_del(self):
         class MyConfig(Config):
             name: str = Option(default='foo')
@@ -116,6 +128,7 @@ class TestConfig(unittest.TestCase):
             del c.data['name']
             self.assertEqual(c.name, 'foo')
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_check_default_value(self):
         with self.assertRaises(TypeError):
             class MyConfig(Config):
@@ -123,6 +136,7 @@ class TestConfig(unittest.TestCase):
 
             MyConfig().name
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_check_initialdata(self):
         class MyConfig(Config):
             name: str = Option(default='foo')
@@ -215,6 +229,7 @@ class TestConfig(unittest.TestCase):
 
         self.assertIs(MyConfig.name.type, str)
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_update(self):
         class MyConfig(Config):
             name: str = Option()
@@ -242,6 +257,7 @@ class TestConfig(unittest.TestCase):
         with self.assertRaises(TypeError):
             MyConfig().update(valid_items, **invalid_dict)
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_check_type(self):
         class MyConfig(Config):
             name: str = Option()
@@ -256,6 +272,7 @@ class TestConfig(unittest.TestCase):
             c.check_type('age', 42)
             c.check_type('age', 'foo')
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_check_type_not_called_more_than_needed(self):
         with self.subTest('__init_subclass__'):
             with unittest.mock.patch.object(Config, 'check_type', wraps=Config.check_type) as check_type_mock:
@@ -370,6 +387,7 @@ class TestConfig(unittest.TestCase):
 
 
 class TestConfigOption(unittest.TestCase):
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_dict(self):
         class SubConfig(Config):
             o: int = Option()
@@ -400,6 +418,7 @@ class TestConfigOption(unittest.TestCase):
         sub.o = 42
         self.assertEqual(c.sub.o, 42)
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_annotation_required(self):
         with self.assertRaises(TypeError):
             class MyConfig(Config):
@@ -415,6 +434,7 @@ class TestConfigOption(unittest.TestCase):
 
         self.assertEqual(MyConfig.sub.__doc__, SubConfig.__doc__)
 
+    @unittest.skipIf(_HAS_PYTYPES, "pytypes fails because it expects class to have the __origin__ attribute")
     def test_default(self):
         class SubConfig(Config):
             o: int = Option(default=42)
@@ -431,8 +451,11 @@ class TestConfigOption(unittest.TestCase):
             self.assertEqual(b.sub.o, 42)
 
         with self.subTest('callable'):
+            def f():
+                return SubConfig()
+
             class MyConfig(Config):
-                sub: SubConfig = ConfigOption(default=SubConfig)
+                sub: SubConfig = ConfigOption(default=f)
 
             self.assertEqual(MyConfig().sub.o, 42)
 
@@ -444,6 +467,7 @@ class TestConfigOption(unittest.TestCase):
 
             self.assertIsNot(MyConfig().sub, default)
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_get_nested(self):
         class SubConfig(Config):
             o: int = Option(default=42)
@@ -458,6 +482,7 @@ class TestConfigOption(unittest.TestCase):
         with self.assertRaises(TypeError):
             MyConfig().get_nested(())
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_set_nested(self):
         class SubConfig(Config):
             o: int = Option(default=42)
@@ -479,6 +504,7 @@ class TestConfigOption(unittest.TestCase):
         with self.assertRaises(TypeError):
             MyConfig().set_nested((), 9000)
 
+    @unittest.skipUnless(WITH_TYPE_CHECK, 'type check is disabled')
     def test_pop_nested(self):
         class SubConfig(Config):
             o: int = Option(default=42)

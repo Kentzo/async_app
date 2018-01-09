@@ -24,11 +24,20 @@ matrix:
     - os: linux
       language: python
       python: 3.6
+      env:
+        - PYTEST_ADDOPTS="--cov=async_app --cov-branch --ignore=setup.py"
+        - COVERAGE_FILE_TYPEGUARD="/tmp/.coverage_typeguard"
+        - COVERAGE_FILE_PYTYPES="/tmp/.coverage_pytypes"
+        - TOX_TESTENV_PASSENV="PYTEST_ADDOPTS COVERAGE_FILE"
       script:
-        - python setup.py test --pytest-args "--cov=async_app --cov-report=html --cov-branch --ignore=setup.py"
+        - python -m pip install -r requirements/ci.txt -c requirements/constraints.txt
         - python setup.py check -srm
+        - COVERAGE_FILE=${COVERAGE_FILE_TYPEGUARD} python -m tox -e typeguard --sitepackages
+        - COVERAGE_FILE=${COVERAGE_FILE_PYTYPES} python -m tox -e pytypes --sitepackages
       after_success:
         - flake8 async_app
+        - coverage combine ${COVERAGE_FILE_PYTYPES} ${COVERAGE_FILE_TYPEGUARD}
+        - coverage html
         - codecov
     - os: linux
       language: python
@@ -42,18 +51,18 @@ matrix:
 
 install:
   - python -m pip install --upgrade pip
-  - python -m pip install ".[ci]" -c requirements.txt
+  - python -m pip install --upgrade wheel setuptools
+  - python -m pip install --upgrade tox
 
 script:
-  - python setup.py test
-  - python setup.py check -srm
+  - python -m tox
 
 deploy:
   provider: pypi
   user: Ilya.Kulakov
   password:
     secure: "ZhPxrdihJ+oK+3n2ApnOpGDIWJF5PUZYbfO50d8HuROQWQtuOYaZfV7hbUmo8O8WasT2ih6RC8VWaZ6B80eEmAm0o/gW2lA8JUbwiPL216psdmMLevwNv1ta49nFFZ/OfLZXfkkKoXPr7DQaShFi6aD7Y9/r3Dk0LVMvmWQR8oqOQErkB6Rp819JFmuAytZplfzGltKa/r4/oNLU8aZe4qsPGciWC8u8H38eiaqHt7gQBXmuRa3d9Nd85L/Q8rmJM5YjOrV9Ssf2OTq6ICavQ6YUaErrhcqrz6ggrHDOAkdwZilgO0/5WYL/NTQ/X6f2wvdDVF2GPiYDdHSES1As8kIfMn+A7Z4KJnqAh3mo6R4ILf9SPnspvNMTnsj+uHwW+eX5HjTobLU9zV8gUfjbSHTgSazbydy5FMYULPkEMPfWng+7gvMramBAoX7Fofql9gAfoMX1SuJAlNnzF3n4tQDbk5tlepmXEcGGgUhJS3Qhwms4FC4CDDqSZNxOwdibBZCOhQ7PWqHxHYosthx7SwYN8CRhwK/rC2XJINkTQWWfEst0+ODHuf0VBFVzlc7Tllj0mAZHEgEK37ZYNq8OJgMN5DeN+AqpHNqs41Kol8oiRMLAEXTHNaD0gzrDrGl39hzZRqmzKkSOtmycb/dCmW0ZVPJ/moZAz90Sr6Pd2N8="
-  distributions: "sdist bdist_wheel"
+  distributions: sdist bdist_wheel
   on:
     tags: true
     branch: master

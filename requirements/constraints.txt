@@ -4,4 +4,5 @@ docutils==0.14
 flake8==3.5.0
 pytest==3.3.2
 pytest-cov==2.5.1
+pytypes==1.0b3
 typeguard==2.1.4

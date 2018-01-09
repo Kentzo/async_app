@@ -3,13 +3,46 @@ The Config container is a typed dict-like class to store application's config.
 """
 from collections import ChainMap, UserDict, OrderedDict
 import copy
+import inspect
+import logging
 from typing import Any, Callable, ClassVar, Dict, Generic, GenericMeta, Iterable, Hashable, Optional, Type, TypeVar, Union, get_type_hints
 
-import typeguard
+try:
+    import typeguard
+except ImportError:
+    _HAS_TYPEGUARD = False
+else:
+    _HAS_TYPEGUARD = True
+
+try:
+    import pytypes
+except ImportError:
+    _HAS_PYTYPES = False
+else:
+    _HAS_PYTYPES = True
+
+
+LOG = logging.getLogger(__name__)
+
+if not _HAS_TYPEGUARD and not _HAS_PYTYPES:
+    LOG.warning("Neither typeguard nor pytypes is installed. Type checking is disabled.")
 
 
 Self = TypeVar('Self')
 OptionType = TypeVar('OptionType')
+
+
+def _qualified_name(obj) -> str:
+    """
+    Return the qualified name (e.g. package.module.Type) for the given object.
+
+    Builtins and types from the :mod:`typing` package get special treatment by having the module
+    name stripped from the generated name.
+    """
+    type_ = obj if inspect.isclass(obj) else type(obj)
+    module = type_.__module__
+    qualname = type_.__qualname__
+    return qualname if module in ('typing', 'builtins') else '{}.{}'.format(module, qualname)
 
 
 class Option(Generic[OptionType]):
@@ -124,6 +157,8 @@ class Option(Generic[OptionType]):
 
         Subclasses can override to transform value.
 
+        >>> from pathlib import Path
+        >>>
         >>> class PathOption(Option[Path]):
         >>>     '''Transform str to Path'''
         >>>     def resolve_value(self, instance, value):
@@ -228,6 +263,9 @@ class Config(UserDict):
 
         @note: If name does not point to an existing option, typing.Any is implied.
         """
+        if not _HAS_TYPEGUARD and not _HAS_PYTYPES:
+            return
+
         if attr_name is None and expected_type is None:
             attr_name = cls._option_names.get(name)
 
@@ -237,7 +275,20 @@ class Config(UserDict):
         if expected_type is None:
             expected_type = cls._option_types.get(attr_name, Any)
 
-        typeguard.check_type(name, value, expected_type, None)
+        if _HAS_TYPEGUARD:
+            try:
+                typeguard.check_type(name, value, expected_type, None)
+            except TypeError:
+                valid_type = False
+            else:
+                valid_type = True
+        elif _HAS_PYTYPES:
+            valid_type = pytypes.is_of_type(value, expected_type)
+
+        if not valid_type:
+            raise TypeError('type of {} must be {}; got {} instead'.format(name,
+                                                                           _qualified_name(expected_type),
+                                                                           _qualified_name(value)))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
