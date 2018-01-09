@@ -1,5 +1,5 @@
 asynctest==0.11.1
-codecov==2.0.11
+codecov==2.0.13
 docutils==0.14
 flake8==3.5.0
 pytest==3.3.2
