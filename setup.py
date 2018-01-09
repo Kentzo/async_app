@@ -28,22 +28,12 @@ class PyTest(TestCommand):
 
 
 REQUIREMENTS = [
-    'typeguard'
 ]
-
 
 TEST_REQUIREMENTS = [
     'asynctest',
     'pytest',
 ]
-
-CI_REQUIREMENTS = TEST_REQUIREMENTS + [
-    'codecov',
-    'docutils',
-    'flake8',
-    'pytest-cov'
-]
-
 
 setup(
     version=about['__version__'],
@@ -51,7 +41,7 @@ setup(
     install_requires=REQUIREMENTS,
     tests_require=TEST_REQUIREMENTS,
     extras_require={
-        'tests': TEST_REQUIREMENTS,
-        'ci': CI_REQUIREMENTS
+        'typeguard': ['typeguard'],
+        'pytypes': ['pytypes']
     }
 )

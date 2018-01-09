@@ -5,11 +5,10 @@ environment:
 
 install:
   - "%PYTHON%\\python.exe -m pip install --upgrade pip"
-  - "%PYTHON%\\python.exe -m pip install --upgrade wheel setuptools>=37"
-  - "%PYTHON%\\python.exe -m pip install \".[ci]\" -c requirements.txt"
+  - "%PYTHON%\\python.exe -m pip install --upgrade wheel setuptools"
+  - "%PYTHON%\\python.exe -m pip install --upgrade tox -c requirements/constraints.txt"
 
 build: off
 
 test_script:
-  - "%PYTHON%\\python.exe setup.py test"
-  - "%PYTHON%\\python.exe setup.py check -srm"
+  - "%PYTHON%\\python.exe -m tox -e typeguard,pytypes"

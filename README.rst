@@ -20,14 +20,18 @@
 Key Features
 ============
 
-- Ideal for heterogeneous asyncio applications
-- `typing-friendly <https://docs.python.org/3/library/typing.html>`_ Config that enforces neither file format nor validation
+- Service-oriented application layout
+- Integrate different asyncio libraries with ease
+- `typing-friendly <https://docs.python.org/3/library/typing.html>`_ Config that can enforce types (via `typeguard <typeguard>`_ or `pytypes <pytypes>`_)
 
 
 Development
-============
+===========
 
-requirements.txt lists all dependencies needed to run tests and generate reports. See `.travis.yml <.travis.yml>`_ for commands.
+requirements.txt lists all dependencies needed to run tests and generate reports.
 
-CI tests each change against latest release of CPython 3 (Windows and macOS) as well as dev (macOS and Ubuntu) and nightly builds (Ubuntu).
-PyPy will be added as soon as all necessary 3.6 features will be implemented.
+CI tests each change against latest release of CPython 3 (Windows and macOS) as well as dev (macOS and Ubuntu)
+and nightly builds (Ubuntu).
+Tests are run against both pytypes and typeguard. Combined coverage is uploaded to PyPI.
+See `.travis.yml <.travis.yml>`_, `.appveyor.yml <.appveyor.yml>`_ and `setup.cfg <setup.cfg>`_
+for the detailed configuration.
