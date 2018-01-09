@@ -73,22 +73,24 @@ class TestWaitOne(TestCase):
     @with_timeout()
     async def test_await_first_exception(self):
         async with TaskGroup() as tasks:
-            e1 = asyncio.Event()
-            e2 = asyncio.Event()
+            f1 = asyncio.Future()
+            f2 = asyncio.Future()
 
-            e1_task = tasks.add_task(e1.wait())
-            e2_task = tasks.add_task(e2.wait())
-            wait_one_task = asyncio.ensure_future(wait_one(e1_task, e2_task))
+            f1_task = tasks.add_task(f1)
+            f2_task = tasks.add_task(f2)
+            wait_one_task = asyncio.ensure_future(wait_one(f1_task, f2_task))
 
             await asyncio.sleep(0)  # give loop a chance to schedule futures
-            e1_task.set_exception(RuntimeError())
+            self.assertFalse(f1_task.done())
+            self.assertFalse(f2_task.done())
+            f1_task.set_exception(RuntimeError())
 
             with self.assertRaises(RuntimeError):
                 await wait_one_task
 
             self.assertIsInstance(wait_one_task.exception(), RuntimeError)
-            self.assertTrue(e1_task.done())
-            self.assertFalse(e2_task.done())
+            self.assertTrue(f1_task.done())
+            self.assertFalse(f2_task.done())
 
 
 class TeatAsyncExitStack(TestCase):
