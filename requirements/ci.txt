@@ -1,4 +1,4 @@
 codecov
-docutils
+docutils==0.14
 flake8
 pytest-cov
