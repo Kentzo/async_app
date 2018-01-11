@@ -1,25 +1,29 @@
 matrix:
+  fast_finish: true
   include:
     - os: osx
       language: generic
+      env: NAME="Python 3.6"
       before_install:
         - brew update
         - brew install python3
-        - virtualenv env -p python3
+        - python3 -m venv env
         - source env/bin/activate
     - os: osx
       language: generic
+      env: NAME="Python HEAD"
       before_install:
         - brew update
         - brew install python3 --HEAD
-        - virtualenv env -p python3
+        - python3 -m venv env
         - source env/bin/activate
     - os: osx
       language: generic
+      env: NAME="Python Dev"
       before_install:
         - brew update
         - brew install python3 --devel
-        - virtualenv env -p python3
+        - python3 -m venv env
         - source env/bin/activate
     - os: linux
       language: python
@@ -43,6 +47,11 @@ matrix:
       python: 3.7-dev
     - os: linux
       language: python
+      python: nightly
+  allow_failures:
+    - os: osx
+      env: NAME="Python HEAD"
+    - os: linux
       python: nightly
 
 install:
