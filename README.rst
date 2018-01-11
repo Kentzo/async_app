@@ -25,6 +25,14 @@ Key Features
 - `typing-friendly <https://docs.python.org/3/library/typing.html>`_ Config that can enforce types (via `typeguard <typeguard>`_ or `pytypes <pytypes>`_)
 
 
+Installation
+============
+
+- ``pip install async_app``
+- ``pip install async_app[typeguard]`` to enforce Config's types with `typeguard <typeguard>`_.
+- ``pip install async_app[pytypes]`` to enforce Config's types with `pytypes <pytypes>`_.
+
+
 Development
 ===========
 
